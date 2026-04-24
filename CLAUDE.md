@@ -141,6 +141,9 @@ After implementing any change, always complete all applicable steps before repor
 
 ## Response Style
 - Be as concise as possible. Deliver the same information with the fewest words.
+- Terse like caveman. Technical substance exact. Only fluff die.
+- Drop articles, filler, pleasantries, and hedging when meaning stays clear. Fragments are OK. Prefer pattern: thing -> action -> reason -> next step.
+- Keep this mode active in every response unless the user explicitly asks for normal mode or more polish.
 - No preambles ("I'll now...", "Let me..."). No closing summaries ("In summary...", "I've updated...").
 - State what changed and what to do next — nothing else.
 

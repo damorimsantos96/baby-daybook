@@ -1,0 +1,82 @@
+{
+  "expo": {
+    "name": "Baby Daybook",
+    "slug": "baby-daybook",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "scheme": "babydaybook",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0f1014"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.diego.babydaybook"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0f1014"
+      },
+      "package": "com.diego.babydaybook",
+      "permissions": [
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ]
+    },
+    "web": {
+      "bundler": "metro",
+      "favicon": "./assets/favicon.png",
+      "output": "single"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/PLACEHOLDER_PROJECT_ID",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0,
+      "enabled": true
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-local-authentication",
+      "expo-secure-store",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 36,
+            "targetSdkVersion": 35,
+            "buildToolsVersion": "36.0.0",
+            "minSdkVersion": 26
+          }
+        }
+      ],
+      "expo-updates",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Permite selecionar foto do filho."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "supabaseUrl": "",
+      "supabaseAnonKey": "",
+      "router": {},
+      "eas": {
+        "projectId": "PLACEHOLDER_PROJECT_ID"
+      }
+    },
+    "owner": "damorimsantos96s-organization"
+  }
+}

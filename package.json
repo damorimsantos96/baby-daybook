@@ -1,0 +1,50 @@
+{
+  "name": "baby-daybook",
+  "main": "expo-router/entry",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "typecheck": "tsc --noEmit",
+    "doctor": "expo doctor",
+    "audit:app": "npx expo install --check",
+    "check": "node scripts/check-build-env.mjs && npm run typecheck && npm run doctor && npm run audit:app",
+    "check:build-env": "node scripts/check-build-env.mjs",
+    "check:supabase": "node scripts/check-supabase-config.mjs",
+    "update:preview": "eas update --channel preview --platform android",
+    "update:production": "eas update --channel production --environment production --platform android"
+  },
+  "dependencies": {
+    "@expo/vector-icons": "^15.1.1",
+    "@shopify/react-native-skia": "2.4.18",
+    "@supabase/supabase-js": "^2.103.3",
+    "@tanstack/react-query": "^5.99.0",
+    "date-fns": "^4.1.0",
+    "expo": "~55.0.0",
+    "expo-constants": "^55.0.14",
+    "expo-image-picker": "~16.1.4",
+    "expo-local-authentication": "^55.0.13",
+    "expo-router": "^55.0.12",
+    "expo-secure-store": "^55.0.13",
+    "expo-status-bar": "~2.2.3",
+    "expo-updates": "~55.0.20",
+    "nativewind": "^4.2.3",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "react-native": "0.83.4",
+    "react-native-gesture-handler": "~2.30.0",
+    "react-native-reanimated": "4.2.1",
+    "react-native-safe-area-context": "^5.4.0",
+    "react-native-screens": "^4.11.1",
+    "react-native-web": "^0.21.0",
+    "tailwindcss": "^3.4.19",
+    "zustand": "^5.0.12"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.25.2",
+    "@types/react": "~19.2.10",
+    "typescript": "~5.9.2"
+  }
+}

@@ -35,7 +35,7 @@
       "output": "single"
     },
     "updates": {
-      "url": "https://u.expo.dev/PLACEHOLDER_PROJECT_ID",
+      "url": "https://u.expo.dev/d34add54-985a-4280-8604-54c895a4a9d6",
       "checkAutomatically": "ON_LOAD",
       "fallbackToCacheTimeout": 0,
       "enabled": true
@@ -74,7 +74,7 @@
       "supabaseAnonKey": "",
       "router": {},
       "eas": {
-        "projectId": "PLACEHOLDER_PROJECT_ID"
+        "projectId": "d34add54-985a-4280-8604-54c895a4a9d6"
       }
     },
     "owner": "damorimsantos96s-organization"

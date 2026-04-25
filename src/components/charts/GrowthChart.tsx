@@ -362,6 +362,33 @@ export function GrowthChart({
             onTouchEnd={() => setTooltipData(null)}
           />
 
+          {/* Y axis labels */}
+          <View
+            pointerEvents="none"
+            style={{ position: "absolute", top: 0, left: 0, width: PAD_LEFT, height: CHART_H }}
+          >
+            {yTicks.map((v, i) => {
+              const pct = (v - minVal) / (maxVal - minVal);
+              const y = CHART_H - PAD_BOTTOM - pct * (CHART_H - PAD_TOP - PAD_BOTTOM) - 6;
+              return (
+                <Text
+                  key={i}
+                  style={{
+                    position: "absolute",
+                    top: y,
+                    left: 0,
+                    width: PAD_LEFT - 6,
+                    color: COLORS.label,
+                    fontSize: 9,
+                    textAlign: "right",
+                  }}
+                >
+                  {v.toFixed(metric === "weight" ? 1 : 0)}
+                </Text>
+              );
+            })}
+          </View>
+
           {/* Tooltip box */}
           {tooltipData && (
             <View
@@ -437,30 +464,6 @@ export function GrowthChart({
               }}
             >
               {m}m
-            </Text>
-          );
-        })}
-      </View>
-
-      {/* Y axis labels */}
-      <View style={{ position: "absolute", top: TITLE_H, left: 0, height: CHART_H }}>
-        {yTicks.map((v, i) => {
-          const pct = (v - minVal) / (maxVal - minVal);
-          const y = CHART_H - PAD_BOTTOM - pct * (CHART_H - PAD_TOP - PAD_BOTTOM) - 6;
-          return (
-            <Text
-              key={i}
-              style={{
-                position: "absolute",
-                top: y,
-                right: 2,
-                width: PAD_LEFT - 4,
-                color: COLORS.label,
-                fontSize: 9,
-                textAlign: "right",
-              }}
-            >
-              {v.toFixed(metric === "weight" ? 1 : 0)}
             </Text>
           );
         })}

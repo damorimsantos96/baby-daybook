@@ -29,8 +29,8 @@ function ageLabel(birthDate: string): string {
   return months > 0 ? `${years}a ${months}m` : `${years}a`;
 }
 
-function ChildPhoto({ childId }: { childId: string }) {
-  const { data: url } = useChildPhotoUrl(childId);
+function ChildPhoto({ childId, hasPhoto }: { childId: string; hasPhoto: boolean }) {
+  const { data: url } = useChildPhotoUrl(childId, hasPhoto);
   if (url) {
     return (
       <Image
@@ -123,11 +123,15 @@ export default function FilhosScreen() {
         birth_date: form.birthDate,
         sex: form.sex,
       });
-      if (form.photoUri) {
-        await uploadPhoto.mutateAsync({ childId: saved.id, uri: form.photoUri });
-        await upsertChild.mutateAsync({ id: saved.id, photo_url: "uploaded" });
-      }
       setSheetOpen(false);
+      if (form.photoUri) {
+        try {
+          await uploadPhoto.mutateAsync({ childId: saved.id, uri: form.photoUri });
+          await upsertChild.mutateAsync({ id: saved.id, photo_url: "uploaded" });
+        } catch (photoErr: any) {
+          Alert.alert("Foto não enviada", photoErr.message);
+        }
+      }
     } catch (e: any) {
       Alert.alert("Erro", e.message);
     } finally {
@@ -226,7 +230,7 @@ export default function FilhosScreen() {
                 gap: 16,
               }}
             >
-              <ChildPhoto childId={item.id} />
+              <ChildPhoto childId={item.id} hasPhoto={!!item.photo_url} />
               <View style={{ flex: 1 }}>
                 <Text style={{ color: "#ecfdf5", fontSize: 18, fontWeight: "700" }}>
                   {item.first_name}

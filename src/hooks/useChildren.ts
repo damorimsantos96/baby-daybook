@@ -24,11 +24,11 @@ export function useChild(id: string) {
   });
 }
 
-export function useChildPhotoUrl(childId: string) {
+export function useChildPhotoUrl(childId: string, hasPhoto = true) {
   return useQuery({
     queryKey: ["child-photo", childId],
     queryFn: () => getChildPhotoUrl(childId),
-    enabled: !!childId,
+    enabled: !!childId && hasPhoto,
     staleTime: 1000 * 60 * 20, // re-fetch every 20 min (URL expires in 24h)
   });
 }

@@ -89,11 +89,10 @@ export async function uploadChildPhoto(
 
   const response = await fetch(uri);
   const blob = await response.blob();
-  const arrayBuffer = await blob.arrayBuffer();
 
   const { error } = await supabase.storage
     .from("child-photos")
-    .upload(path, arrayBuffer, {
+    .upload(path, blob, {
       contentType: "image/jpeg",
       upsert: true,
     });

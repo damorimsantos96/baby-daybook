@@ -70,7 +70,7 @@ const emptyForm = (): ChildFormState => ({
 });
 
 export default function FilhosScreen() {
-  const { data: children = [], isLoading } = useChildren();
+  const { data: children = [], isLoading, error } = useChildren();
   const upsertChild = useUpsertChild();
   const deleteChild = useDeleteChild();
   const uploadPhoto = useUploadChildPhoto();
@@ -173,6 +173,16 @@ export default function FilhosScreen() {
 
       {isLoading ? (
         <ActivityIndicator color="#10b981" style={{ marginTop: 40 }} />
+      ) : error ? (
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 32 }}>
+          <Ionicons name="warning-outline" size={48} color="#ef4444" />
+          <Text style={{ color: "#ef4444", marginTop: 12, fontSize: 15, textAlign: "center" }}>
+            Erro ao carregar filhos
+          </Text>
+          <Text style={{ color: "#72737f", marginTop: 6, fontSize: 12, textAlign: "center" }}>
+            {(error as Error).message}
+          </Text>
+        </View>
       ) : children.length === 0 ? (
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
           <Ionicons name="people-outline" size={56} color="#2c2d36" />

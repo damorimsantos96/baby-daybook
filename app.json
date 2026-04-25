@@ -64,7 +64,8 @@
         {
           "photosPermission": "Permite selecionar foto do filho."
         }
-      ]
+      ],
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true

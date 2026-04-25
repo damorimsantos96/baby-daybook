@@ -66,7 +66,7 @@ export default function LoginScreen() {
         }}
       >
         <Image
-          source={require("@/assets/icon.png")}
+          source={require("../../assets/icon.png")}
           style={{ width: 64, height: 64, borderRadius: 16, marginBottom: 16 }}
         />
         <Text style={{ color: "#fff", fontSize: 22, fontWeight: "800", marginBottom: 4 }}>

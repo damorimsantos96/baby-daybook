@@ -88,12 +88,14 @@ export async function uploadChildPhoto(
   const path = `${user.id}/${childId}.jpg`;
 
   const response = await fetch(uri);
-  const blob = await response.blob();
+  const arrayBuffer = await response.arrayBuffer();
+  const contentType = response.headers.get("content-type") || "image/jpeg";
+  const blob = new Blob([arrayBuffer], { type: contentType });
 
   const { error } = await supabase.storage
     .from("child-photos")
     .upload(path, blob, {
-      contentType: "image/jpeg",
+      contentType,
       upsert: true,
     });
   if (error) throw error;

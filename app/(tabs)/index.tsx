@@ -4,6 +4,7 @@ import {
   Alert,
   FlatList,
   Image,
+  Platform,
   Pressable,
   ScrollView,
   Text,
@@ -29,8 +30,14 @@ function ageLabel(birthDate: string): string {
   return months > 0 ? `${years}a ${months}m` : `${years}a`;
 }
 
-function ChildPhoto({ childId, hasPhoto }: { childId: string; hasPhoto: boolean }) {
-  const { data: url } = useChildPhotoUrl(childId, hasPhoto);
+function ChildPhoto({
+  childId,
+  photoUrl,
+}: {
+  childId: string;
+  photoUrl: string | null;
+}) {
+  const { data: url } = useChildPhotoUrl(childId, photoUrl);
   if (url) {
     return (
       <Image
@@ -62,7 +69,10 @@ interface ChildFormState {
   sex: Sex;
   photoUri?: string;
   photoMimeType?: string;
+  photoBase64?: string;
+  photoFile?: File | null;
   hasExistingPhoto?: boolean;
+  existingPhotoUrl?: string | null;
 }
 
 const emptyForm = (): ChildFormState => ({
@@ -93,6 +103,7 @@ export default function FilhosScreen() {
       birthDate: child.birth_date,
       sex: child.sex,
       hasExistingPhoto: !!child.photo_url,
+      existingPhotoUrl: child.photo_url,
     });
     setSheetOpen(true);
   }
@@ -102,14 +113,24 @@ export default function FilhosScreen() {
       mediaTypes: ["images"],
       allowsEditing: true,
       aspect: [1, 1],
+      base64: Platform.OS !== "web",
       quality: 0.8,
     });
     const asset = result.assets?.[0];
     if (!result.canceled && asset) {
+      const photoMimeType =
+        Platform.OS === "web"
+          ? asset.mimeType ?? asset.file?.type ?? "image/jpeg"
+          : asset.base64
+            ? "image/jpeg"
+            : asset.mimeType ?? "image/jpeg";
+
       setForm((f) => ({
         ...f,
         photoUri: asset.uri,
-        photoMimeType: asset.mimeType ?? "image/jpeg",
+        photoMimeType: photoMimeType,
+        photoBase64: asset.base64 ?? undefined,
+        photoFile: asset.file ?? null,
       }));
     }
   }
@@ -134,12 +155,14 @@ export default function FilhosScreen() {
       setSheetOpen(false);
       if (form.photoUri) {
         try {
-          await uploadPhoto.mutateAsync({
+          const photoUrl = await uploadPhoto.mutateAsync({
             childId: saved.id,
             uri: form.photoUri,
             mimeType: form.photoMimeType,
+            base64Data: form.photoBase64,
+            webFile: form.photoFile,
           });
-          await upsertChild.mutateAsync({ id: saved.id, photo_url: "uploaded" });
+          await upsertChild.mutateAsync({ id: saved.id, photo_url: photoUrl });
         } catch (photoErr: any) {
           Alert.alert("Foto não enviada", photoErr.message);
         }
@@ -236,7 +259,7 @@ export default function FilhosScreen() {
                 onPress={() => router.push(`/filho/${item.id}`)}
                 style={{ flex: 1, flexDirection: "row", alignItems: "center", padding: 16, gap: 16 }}
               >
-                <ChildPhoto childId={item.id} hasPhoto={!!item.photo_url} />
+                <ChildPhoto childId={item.id} photoUrl={item.photo_url} />
                 <View style={{ flex: 1 }}>
                   <Text style={{ color: "#ecfdf5", fontSize: 18, fontWeight: "700" }}>
                     {item.first_name}
@@ -285,7 +308,7 @@ export default function FilhosScreen() {
             />
           ) : form.id && form.hasExistingPhoto ? (
             <View style={{ width: 72, height: 72 }}>
-              <ChildPhoto childId={form.id} hasPhoto />
+              <ChildPhoto childId={form.id} photoUrl={form.existingPhotoUrl ?? null} />
               <View
                 style={{
                   position: "absolute",

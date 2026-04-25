@@ -8,7 +8,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
-    "doctor": "expo doctor",
+    "doctor": "npx expo-doctor",
     "audit:app": "npx expo install --check",
     "check": "node scripts/check-build-env.mjs && npm run typecheck && npm run doctor && npm run audit:app",
     "check:build-env": "node scripts/check-build-env.mjs",

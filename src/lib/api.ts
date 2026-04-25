@@ -80,21 +80,21 @@ export async function deleteChild(id: string): Promise<void> {
 
 export async function uploadChildPhoto(
   childId: string,
-  uri: string
+  uri: string,
+  mimeType?: string
 ): Promise<string> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
 
   const path = `${user.id}/${childId}.jpg`;
-
+  const contentType = mimeType ?? "image/jpeg";
   const response = await fetch(uri);
-  const rawBlob = await response.blob();
-  const file = new File([rawBlob], `${childId}.jpg`, { type: "image/jpeg" });
+  const file = await response.arrayBuffer();
 
   const { error } = await supabase.storage
     .from("child-photos")
     .upload(path, file, {
-      contentType: "image/jpeg",
+      contentType,
       upsert: true,
     });
   if (error) throw error;

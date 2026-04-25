@@ -61,6 +61,7 @@ interface ChildFormState {
   birthDate: string;
   sex: Sex;
   photoUri?: string;
+  photoMimeType?: string;
   hasExistingPhoto?: boolean;
 }
 
@@ -98,13 +99,18 @@ export default function FilhosScreen() {
 
   async function pickPhoto() {
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ["images"],
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.8,
     });
-    if (!result.canceled && result.assets[0]) {
-      setForm((f) => ({ ...f, photoUri: result.assets[0].uri }));
+    const asset = result.assets?.[0];
+    if (!result.canceled && asset) {
+      setForm((f) => ({
+        ...f,
+        photoUri: asset.uri,
+        photoMimeType: asset.mimeType ?? "image/jpeg",
+      }));
     }
   }
 
@@ -128,7 +134,11 @@ export default function FilhosScreen() {
       setSheetOpen(false);
       if (form.photoUri) {
         try {
-          await uploadPhoto.mutateAsync({ childId: saved.id, uri: form.photoUri });
+          await uploadPhoto.mutateAsync({
+            childId: saved.id,
+            uri: form.photoUri,
+            mimeType: form.photoMimeType,
+          });
           await upsertChild.mutateAsync({ id: saved.id, photo_url: "uploaded" });
         } catch (photoErr: any) {
           Alert.alert("Foto não enviada", photoErr.message);

@@ -46,8 +46,15 @@ export function useUpsertChild() {
 export function useUploadChildPhoto() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ childId, uri }: { childId: string; uri: string }) =>
-      uploadChildPhoto(childId, uri),
+    mutationFn: ({
+      childId,
+      uri,
+      mimeType,
+    }: {
+      childId: string;
+      uri: string;
+      mimeType?: string;
+    }) => uploadChildPhoto(childId, uri, mimeType),
     onSuccess: (_data, { childId }) => {
       qc.invalidateQueries({ queryKey: ["child-photo", childId] });
     },

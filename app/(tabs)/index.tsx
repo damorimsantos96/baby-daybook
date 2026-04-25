@@ -61,6 +61,7 @@ interface ChildFormState {
   birthDate: string;
   sex: Sex;
   photoUri?: string;
+  hasExistingPhoto?: boolean;
 }
 
 const emptyForm = (): ChildFormState => ({
@@ -90,6 +91,7 @@ export default function FilhosScreen() {
       firstName: child.first_name,
       birthDate: child.birth_date,
       sex: child.sex,
+      hasExistingPhoto: !!child.photo_url,
     });
     setSheetOpen(true);
   }
@@ -212,38 +214,48 @@ export default function FilhosScreen() {
           keyExtractor={(c) => c.id}
           contentContainerStyle={{ padding: 16, gap: 12 }}
           renderItem={({ item }) => (
-            <Pressable
-              onPress={() => router.push(`/filho/${item.id}`)}
-              onLongPress={() =>
-                Alert.alert(item.first_name, "O que deseja fazer?", [
-                  { text: "Editar", onPress: () => openEdit(item) },
-                  { text: "Excluir", style: "destructive", onPress: () => confirmDelete(item) },
-                  { text: "Cancelar", style: "cancel" },
-                ])
-              }
+            <View
               style={{
                 backgroundColor: "#1c1d23",
                 borderRadius: 14,
-                padding: 16,
                 flexDirection: "row",
                 alignItems: "center",
-                gap: 16,
               }}
             >
-              <ChildPhoto childId={item.id} hasPhoto={!!item.photo_url} />
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: "#ecfdf5", fontSize: 18, fontWeight: "700" }}>
-                  {item.first_name}
-                </Text>
-                <Text style={{ color: "#72737f", fontSize: 13, marginTop: 2 }}>
-                  {item.sex === "M" ? "Menino" : "Menina"} · {ageLabel(item.birth_date)}
-                </Text>
-                <Text style={{ color: "#4a4b58", fontSize: 11, marginTop: 1 }}>
-                  {format(parseISO(item.birth_date), "dd/MM/yyyy")}
-                </Text>
+              <Pressable
+                onPress={() => router.push(`/filho/${item.id}`)}
+                style={{ flex: 1, flexDirection: "row", alignItems: "center", padding: 16, gap: 16 }}
+              >
+                <ChildPhoto childId={item.id} hasPhoto={!!item.photo_url} />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: "#ecfdf5", fontSize: 18, fontWeight: "700" }}>
+                    {item.first_name}
+                  </Text>
+                  <Text style={{ color: "#72737f", fontSize: 13, marginTop: 2 }}>
+                    {item.sex === "M" ? "Menino" : "Menina"} · {ageLabel(item.birth_date)}
+                  </Text>
+                  <Text style={{ color: "#4a4b58", fontSize: 11, marginTop: 1 }}>
+                    {format(parseISO(item.birth_date), "dd/MM/yyyy")}
+                  </Text>
+                </View>
+              </Pressable>
+              <View style={{ flexDirection: "row", alignItems: "center", paddingRight: 8, gap: 4 }}>
+                <Pressable
+                  onPress={() => openEdit(item)}
+                  hitSlop={8}
+                  style={{ padding: 8 }}
+                >
+                  <Ionicons name="pencil-outline" size={18} color="#72737f" />
+                </Pressable>
+                <Pressable
+                  onPress={() => confirmDelete(item)}
+                  hitSlop={8}
+                  style={{ padding: 8 }}
+                >
+                  <Ionicons name="trash-outline" size={18} color="#ef4444" />
+                </Pressable>
               </View>
-              <Ionicons name="chevron-forward" size={20} color="#4a4b58" />
-            </Pressable>
+            </View>
           )}
         />
       )}
@@ -261,6 +273,22 @@ export default function FilhosScreen() {
               source={{ uri: form.photoUri }}
               style={{ width: 72, height: 72, borderRadius: 36 }}
             />
+          ) : form.id && form.hasExistingPhoto ? (
+            <View style={{ width: 72, height: 72 }}>
+              <ChildPhoto childId={form.id} hasPhoto />
+              <View
+                style={{
+                  position: "absolute",
+                  bottom: 0,
+                  right: 0,
+                  backgroundColor: "#10b981",
+                  borderRadius: 10,
+                  padding: 3,
+                }}
+              >
+                <Ionicons name="camera" size={12} color="#fff" />
+              </View>
+            </View>
           ) : (
             <View
               style={{

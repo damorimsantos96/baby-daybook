@@ -284,13 +284,7 @@ export default function FilhoScreen() {
             }
             renderItem={({ item }) => (
               <Pressable
-                onLongPress={() =>
-                  Alert.alert(format(parseISO(item.date), "dd/MM/yyyy"), "O que deseja?", [
-                    { text: "Editar", onPress: () => openEdit(item) },
-                    { text: "Excluir", style: "destructive", onPress: () => confirmDelete(item) },
-                    { text: "Cancelar", style: "cancel" },
-                  ])
-                }
+                onPress={() => openEdit(item)}
                 style={{
                   backgroundColor: "#1c1d23",
                   borderRadius: 10,
@@ -462,6 +456,26 @@ export default function FilhoScreen() {
             </Text>
           )}
         </Pressable>
+
+        {form.id && (
+          <Pressable
+            onPress={() => {
+              const target = measurements.find((m) => m.id === form.id);
+              if (target) {
+                setSheetOpen(false);
+                setTimeout(() => confirmDelete(target), 300);
+              }
+            }}
+            style={{
+              borderRadius: 12,
+              paddingVertical: 14,
+              alignItems: "center",
+              marginTop: 10,
+            }}
+          >
+            <Text style={{ color: "#ef4444", fontWeight: "600", fontSize: 15 }}>Excluir medição</Text>
+          </Pressable>
+        )}
       </BottomSheetModal>
     </SafeAreaView>
   );

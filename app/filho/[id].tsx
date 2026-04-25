@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -13,6 +13,7 @@ import {
 import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { format, parseISO, differenceInMonths, differenceInYears } from "date-fns";
+import { ageInMonths } from "@/utils/growthCurves";
 import { Ionicons } from "@expo/vector-icons";
 import { useChild, useChildPhotoUrl } from "@/hooks/useChildren";
 import { useMeasurements, useUpsertMeasurement, useDeleteMeasurement } from "@/hooks/useMeasurements";
@@ -167,7 +168,18 @@ export default function FilhoScreen() {
 
   const [activeTab, setActiveTab] = useState<"tabela" | "graficos">("tabela");
   const [standard, setStandard] = useState<GrowthStandard>("WHO");
-  const [pMode, setPMode] = useState<PercentileMode>(5);
+  const [pMode, setPMode] = useState<PercentileMode>(3);
+  const [chartContainerWidth, setChartContainerWidth] = useState(0);
+
+  const childAgeMonths = useMemo(
+    () => (child ? differenceInMonths(new Date(), parseISO(child.birth_date)) : 0),
+    [child]
+  );
+  const cdcAvailable = childAgeMonths >= 24;
+
+  useEffect(() => {
+    if (!cdcAvailable && standard === "CDC") setStandard("WHO");
+  }, [cdcAvailable]);
 
   const [sheetOpen, setSheetOpen] = useState(false);
   const [form, setForm] = useState<MeasForm>(emptyForm());
@@ -305,83 +317,95 @@ export default function FilhoScreen() {
         )
       ) : (
         // ─── Charts tab ─────────────────────────────────────────────────────
-        <ScrollView contentContainerStyle={{ padding: 16 }}>
-          <View style={{ flexDirection: "row", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
-            <TogglePill<GrowthStandard>
-              options={[
-                { key: "WHO", label: "WHO (0–60m)" },
-                { key: "CDC", label: "CDC (2–20a)" },
-              ]}
-              value={standard}
-              onChange={setStandard}
-            />
-            <TogglePill<string>
-              options={[
-                { key: "5", label: "5 linhas" },
-                { key: "3", label: "3 linhas" },
-              ]}
-              value={String(pMode)}
-              onChange={(v) => setPMode(Number(v) as PercentileMode)}
-            />
-          </View>
-
-          {measurements.length === 0 ? (
-            <View style={{ alignItems: "center", marginTop: 40 }}>
-              <Ionicons name="analytics-outline" size={48} color="#2c2d36" />
-              <Text style={{ color: "#72737f", marginTop: 12, fontSize: 14 }}>
-                Adicione medições para ver os gráficos
-              </Text>
+        <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 32 }}>
+          <View
+            onLayout={(e) => {
+              const w = e.nativeEvent.layout.width;
+              if (w > 0) setChartContainerWidth(w);
+            }}
+          >
+            <View style={{ flexDirection: "row", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
+              {cdcAvailable && (
+                <TogglePill<GrowthStandard>
+                  options={[
+                    { key: "WHO", label: "WHO (0–60m)" },
+                    { key: "CDC", label: "CDC (2–20a)" },
+                  ]}
+                  value={standard}
+                  onChange={setStandard}
+                />
+              )}
+              <TogglePill<string>
+                options={[
+                  { key: "5", label: "5 linhas" },
+                  { key: "3", label: "3 linhas" },
+                ]}
+                value={String(pMode)}
+                onChange={(v) => setPMode(Number(v) as PercentileMode)}
+              />
             </View>
-          ) : (
-            <>
-              <GrowthChart
-                metric="weight"
-                label="Peso"
-                unit="kg"
-                birthDate={child.birth_date}
-                sex={child.sex}
-                measurements={measurements}
-                standard={standard}
-                percentileMode={pMode}
-              />
-              <GrowthChart
-                metric="height"
-                label="Altura / Comprimento"
-                unit="cm"
-                birthDate={child.birth_date}
-                sex={child.sex}
-                measurements={measurements}
-                standard={standard}
-                percentileMode={pMode}
-              />
-              {standard === "WHO" && (
+
+            {measurements.length === 0 ? (
+              <View style={{ alignItems: "center", marginTop: 40 }}>
+                <Ionicons name="analytics-outline" size={48} color="#2c2d36" />
+                <Text style={{ color: "#72737f", marginTop: 12, fontSize: 14 }}>
+                  Adicione medições para ver os gráficos
+                </Text>
+              </View>
+            ) : (
+              <>
                 <GrowthChart
-                  metric="head"
-                  label="Circunferência da Cabeça"
+                  metric="weight"
+                  label="Peso"
+                  unit="kg"
+                  birthDate={child.birth_date}
+                  sex={child.sex}
+                  measurements={measurements}
+                  standard={standard}
+                  percentileMode={pMode}
+                  containerWidth={chartContainerWidth}
+                />
+                <GrowthChart
+                  metric="height"
+                  label="Altura / Comprimento"
                   unit="cm"
                   birthDate={child.birth_date}
                   sex={child.sex}
                   measurements={measurements}
                   standard={standard}
                   percentileMode={pMode}
+                  containerWidth={chartContainerWidth}
                 />
-              )}
-              {standard === "CDC" && (
-                <View
-                  style={{
-                    backgroundColor: "#1c1d23",
-                    borderRadius: 10,
-                    padding: 14,
-                    marginTop: 4,
-                  }}
-                >
-                  <Text style={{ color: "#72737f", fontSize: 12 }}>
-                    O CDC não publica curvas de circunferência cefálica para 2–20 anos.
-                  </Text>
-                </View>
-              )}
-            </>
-          )}
+                {standard === "WHO" && (
+                  <GrowthChart
+                    metric="head"
+                    label="Circunferência da Cabeça"
+                    unit="cm"
+                    birthDate={child.birth_date}
+                    sex={child.sex}
+                    measurements={measurements}
+                    standard={standard}
+                    percentileMode={pMode}
+                    containerWidth={chartContainerWidth}
+                  />
+                )}
+                {standard === "CDC" && (
+                  <View
+                    style={{
+                      backgroundColor: "#1c1d23",
+                      borderRadius: 10,
+                      padding: 14,
+                      marginTop: 4,
+                    }}
+                  >
+                    <Text style={{ color: "#72737f", fontSize: 12 }}>
+                      O CDC não publica curvas de circunferência cefálica para 2–20 anos.
+                    </Text>
+                  </View>
+                )}
+              </>
+            )}
+          </View>
         </ScrollView>
       )}
 

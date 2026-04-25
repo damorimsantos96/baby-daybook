@@ -10,30 +10,31 @@ import {
   vec,
 } from "@shopify/react-native-skia";
 import { format, parseISO } from "date-fns";
-import { ptBR } from "date-fns/locale";
 import { ageInMonths, getPercentileCurve } from "@/utils/growthCurves";
 import type {
   GrowthMetric,
   GrowthStandard,
   Measurement,
   PercentileMode,
+  PercentilePoint,
   Sex,
 } from "@/types";
 
 // ─── Layout constants ─────────────────────────────────────────────────────────
-const PAD_LEFT = 38;
+const PAD_LEFT = 48;
 const PAD_RIGHT = 16;
 const PAD_TOP = 12;
 const PAD_BOTTOM = 32;
-const CHART_H = 220;
-const MONTH_WIDTH = 5; // px per month on x axis
+const CHART_H = 440;
+const MONTH_WIDTH = 5;
+const TITLE_H = 26;
 
 const COLORS = {
-  p50:  "#10b981", // emerald solid
-  p15:  "#f59e0b", // amber dashed
-  p85:  "#f59e0b",
-  p3:   "#ef4444", // red dashed
-  p97:  "#ef4444",
+  p50:   "#10b981",
+  p15:   "#f59e0b",
+  p85:   "#f59e0b",
+  p3:    "#ef4444",
+  p97:   "#ef4444",
   child: "#ffffff",
   dot:   "#10b981",
   axis:  "#4a4b58",
@@ -57,10 +58,34 @@ function toY(val: number, minVal: number, maxVal: number): number {
   return CHART_H - PAD_BOTTOM - ((val - minVal) / (maxVal - minVal)) * h;
 }
 
-interface Tooltip {
-  x: number;
-  y: number;
-  label: string;
+function interp(
+  curve: PercentilePoint[],
+  month: number,
+  get: (p: PercentilePoint) => number
+): number | null {
+  if (!curve.length) return null;
+  if (month <= curve[0].month) return get(curve[0]);
+  const last = curve[curve.length - 1];
+  if (month >= last.month) return get(last);
+  for (let i = 0; i < curve.length - 1; i++) {
+    if (curve[i].month <= month && month < curve[i + 1].month) {
+      const t = (month - curve[i].month) / (curve[i + 1].month - curve[i].month);
+      return get(curve[i]) * (1 - t) + get(curve[i + 1]) * t;
+    }
+  }
+  return null;
+}
+
+interface TooltipData {
+  svgX: number;
+  month: number;
+  p3: number | null;
+  p50: number | null;
+  p97: number | null;
+  p15: number | null;
+  p85: number | null;
+  childValue: number | null;
+  childDate: string | null;
 }
 
 interface Props {
@@ -72,6 +97,7 @@ interface Props {
   measurements: Measurement[];
   standard: GrowthStandard;
   percentileMode: PercentileMode;
+  containerWidth?: number;
 }
 
 export function GrowthChart({
@@ -83,8 +109,11 @@ export function GrowthChart({
   measurements,
   standard,
   percentileMode,
+  containerWidth,
 }: Props) {
-  const [tooltip, setTooltip] = useState<Tooltip | null>(null);
+  const [tooltipData, setTooltipData] = useState<TooltipData | null>(null);
+
+  const decimals = metric === "weight" ? 2 : 1;
 
   const dataPoints = useMemo(() => {
     return measurements
@@ -103,8 +132,9 @@ export function GrowthChart({
             : (m.head_circumference_cm as number),
         date: m.date,
       }))
+      .filter((d) => standard !== "CDC" || d.month >= 24)
       .sort((a, b) => a.month - b.month);
-  }, [measurements, birthDate, metric]);
+  }, [measurements, birthDate, metric, standard]);
 
   const curve = useMemo(
     () => getPercentileCurve(metric, sex, standard, percentileMode),
@@ -116,12 +146,13 @@ export function GrowthChart({
       ...curve.map((p) => p.month),
       ...dataPoints.map((d) => d.month),
     ];
-    if (!allMonths.length) return { minMonth: 0, maxMonth: 60, canvasW: 60 * MONTH_WIDTH };
+    if (!allMonths.length) return { minMonth: 0, maxMonth: 60, canvasW: containerWidth ?? 300 };
     const [lo, hi] = range(allMonths);
     const buffered = Math.max(hi + 6, lo + 12);
-    const w = (buffered - lo) * MONTH_WIDTH;
-    return { minMonth: lo, maxMonth: buffered, canvasW: Math.max(w, 300) };
-  }, [curve, dataPoints]);
+    const spanW = (buffered - lo) * MONTH_WIDTH;
+    const w = Math.max(spanW, containerWidth ?? 300);
+    return { minMonth: lo, maxMonth: buffered, canvasW: w };
+  }, [curve, dataPoints, containerWidth]);
 
   const chartW = canvasW - PAD_LEFT - PAD_RIGHT;
 
@@ -139,7 +170,7 @@ export function GrowthChart({
 
   // ─── Build percentile paths ──────────────────────────────────────────────
 
-  function buildPath(getter: (p: { p3: number; p15: number; p50: number; p85: number; p97: number }) => number) {
+  function buildPath(getter: (p: PercentilePoint) => number) {
     if (!curve.length) return null;
     const path = Skia.Path.Make();
     curve.forEach((pt, i) => {
@@ -157,8 +188,6 @@ export function GrowthChart({
   const pathP3  = buildPath((p) => p.p3);
   const pathP97 = buildPath((p) => p.p97);
 
-  // ─── Child line ───────────────────────────────────────────────────────────
-
   const childPath = useMemo(() => {
     if (dataPoints.length < 2) return null;
     const path = Skia.Path.Make();
@@ -171,7 +200,7 @@ export function GrowthChart({
     return path;
   }, [dataPoints, minMonth, maxMonth, chartW, minVal, maxVal]);
 
-  // ─── Axis tick labels ─────────────────────────────────────────────────────
+  // ─── Axis ticks ───────────────────────────────────────────────────────────
 
   const xTicks = useMemo(() => {
     const ticks: number[] = [];
@@ -181,103 +210,206 @@ export function GrowthChart({
   }, [minMonth, maxMonth]);
 
   const yTicks = useMemo(() => {
-    const count = 4;
+    const count = 5;
     const step = (maxVal - minVal) / count;
     return Array.from({ length: count + 1 }, (_, i) => minVal + i * step);
   }, [minVal, maxVal]);
 
+  // ─── Touch tooltip ────────────────────────────────────────────────────────
+
+  function handleTouch(locationX: number) {
+    if (locationX < PAD_LEFT || locationX > PAD_LEFT + chartW) {
+      setTooltipData(null);
+      return;
+    }
+    const month = minMonth + ((locationX - PAD_LEFT) / chartW) * (maxMonth - minMonth);
+    const clamped = Math.max(minMonth, Math.min(maxMonth, month));
+
+    const nearest =
+      dataPoints.length > 0
+        ? dataPoints.reduce((a, b) =>
+            Math.abs(a.month - clamped) < Math.abs(b.month - clamped) ? a : b
+          )
+        : null;
+
+    setTooltipData({
+      svgX: locationX,
+      month: clamped,
+      p3:  interp(curve, clamped, (p) => p.p3),
+      p50: interp(curve, clamped, (p) => p.p50),
+      p97: interp(curve, clamped, (p) => p.p97),
+      p15: interp(curve, clamped, (p) => p.p15),
+      p85: interp(curve, clamped, (p) => p.p85),
+      childValue: nearest && Math.abs(nearest.month - clamped) <= 4 ? nearest.value : null,
+      childDate:  nearest && Math.abs(nearest.month - clamped) <= 4 ? nearest.date  : null,
+    });
+  }
+
   if (!curve.length) return null;
 
+  const tooltipLeft =
+    tooltipData && tooltipData.svgX > canvasW / 2
+      ? tooltipData.svgX - 138
+      : (tooltipData?.svgX ?? 0) + 10;
+
   return (
-    <View style={{ marginBottom: 24 }}>
+    <View style={{ marginBottom: 28 }}>
       <Text
         style={{ color: "#ecfdf5", fontSize: 14, fontWeight: "600", marginBottom: 6, marginLeft: PAD_LEFT }}
       >
         {label}
       </Text>
 
+      {/* Canvas + touch overlay */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-        <Canvas style={{ width: canvasW, height: CHART_H }}>
-          {/* Y axis */}
-          {yTicks.map((v, i) => {
-            const y = toY(v, minVal, maxVal);
-            return (
-              <React.Fragment key={i}>
-                <Line
-                  p1={vec(PAD_LEFT, y)}
-                  p2={vec(canvasW - PAD_RIGHT, y)}
-                  color={COLORS.axis}
-                  strokeWidth={0.5}
-                />
-              </React.Fragment>
-            );
-          })}
+        <View style={{ position: "relative" }}>
+          <Canvas style={{ width: canvasW, height: CHART_H }}>
+            {/* Grid lines */}
+            {yTicks.map((v, i) => {
+              const y = toY(v, minVal, maxVal);
+              return (
+                <React.Fragment key={i}>
+                  <Line
+                    p1={vec(PAD_LEFT, y)}
+                    p2={vec(canvasW - PAD_RIGHT, y)}
+                    color={COLORS.axis}
+                    strokeWidth={0.5}
+                  />
+                </React.Fragment>
+              );
+            })}
 
-          {/* Percentile curves */}
-          {pathP3 && (
-            <Path path={pathP3} color={COLORS.p3} style="stroke" strokeWidth={1}>
-              <DashPathEffect intervals={[4, 4]} />
-            </Path>
-          )}
-          {pathP97 && (
-            <Path path={pathP97} color={COLORS.p97} style="stroke" strokeWidth={1}>
-              <DashPathEffect intervals={[4, 4]} />
-            </Path>
-          )}
-          {percentileMode === 5 && pathP15 && (
-            <Path path={pathP15} color={COLORS.p15} style="stroke" strokeWidth={1}>
-              <DashPathEffect intervals={[6, 3]} />
-            </Path>
-          )}
-          {percentileMode === 5 && pathP85 && (
-            <Path path={pathP85} color={COLORS.p85} style="stroke" strokeWidth={1}>
-              <DashPathEffect intervals={[6, 3]} />
-            </Path>
-          )}
-          {pathP50 && (
-            <Path path={pathP50} color={COLORS.p50} style="stroke" strokeWidth={1.5} />
-          )}
+            {/* Percentile curves */}
+            {pathP3 && (
+              <Path path={pathP3} color={COLORS.p3} style="stroke" strokeWidth={1}>
+                <DashPathEffect intervals={[4, 4]} />
+              </Path>
+            )}
+            {pathP97 && (
+              <Path path={pathP97} color={COLORS.p97} style="stroke" strokeWidth={1}>
+                <DashPathEffect intervals={[4, 4]} />
+              </Path>
+            )}
+            {percentileMode === 5 && pathP15 && (
+              <Path path={pathP15} color={COLORS.p15} style="stroke" strokeWidth={1}>
+                <DashPathEffect intervals={[6, 3]} />
+              </Path>
+            )}
+            {percentileMode === 5 && pathP85 && (
+              <Path path={pathP85} color={COLORS.p85} style="stroke" strokeWidth={1}>
+                <DashPathEffect intervals={[6, 3]} />
+              </Path>
+            )}
+            {pathP50 && (
+              <Path path={pathP50} color={COLORS.p50} style="stroke" strokeWidth={1.5} />
+            )}
 
-          {/* Child line */}
-          {childPath && (
-            <Path path={childPath} color={COLORS.child} style="stroke" strokeWidth={2} />
-          )}
+            {/* Child line */}
+            {childPath && (
+              <Path path={childPath} color={COLORS.child} style="stroke" strokeWidth={2} />
+            )}
 
-          {/* Child dots */}
-          {dataPoints.map((pt, i) => {
-            const x = toX(pt.month, minMonth, maxMonth, chartW);
-            const y = toY(pt.value, minVal, maxVal);
-            return (
-              <Circle key={i} cx={x} cy={y} r={4} color={COLORS.dot} />
-            );
-          })}
-        </Canvas>
-      </ScrollView>
+            {/* Child dots */}
+            {dataPoints.map((pt, i) => {
+              const x = toX(pt.month, minMonth, maxMonth, chartW);
+              const y = toY(pt.value, minVal, maxVal);
+              return <Circle key={i} cx={x} cy={y} r={5} color={COLORS.dot} />;
+            })}
 
-      {/* X axis labels (outside canvas for simplicity) */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} scrollEnabled={false}>
-        <View style={{ width: canvasW, flexDirection: "row", paddingLeft: PAD_LEFT }}>
-          {xTicks.map((m) => {
-            const pct = (m - minMonth) / (maxMonth - minMonth);
-            return (
-              <Text
-                key={m}
-                style={{
-                  position: "absolute",
-                  left: pct * chartW - 12,
-                  color: COLORS.label,
-                  fontSize: 10,
-                }}
-              >
-                {m}m
+            {/* Tooltip crosshair */}
+            {tooltipData && (
+              <Line
+                p1={vec(tooltipData.svgX, PAD_TOP)}
+                p2={vec(tooltipData.svgX, CHART_H - PAD_BOTTOM)}
+                color="rgba(255,255,255,0.25)"
+                strokeWidth={1}
+              />
+            )}
+          </Canvas>
+
+          {/* Touch capture layer */}
+          <View
+            style={{ position: "absolute", top: 0, left: 0, width: canvasW, height: CHART_H }}
+            onTouchStart={(e) => handleTouch(e.nativeEvent.locationX)}
+            onTouchMove={(e) => handleTouch(e.nativeEvent.locationX)}
+            onTouchEnd={() => setTooltipData(null)}
+          />
+
+          {/* Tooltip box */}
+          {tooltipData && (
+            <View
+              style={{
+                position: "absolute",
+                top: PAD_TOP + 8,
+                left: tooltipLeft,
+                backgroundColor: "#1c1d23",
+                borderRadius: 8,
+                padding: 10,
+                borderWidth: 1,
+                borderColor: "#2c2d36",
+                minWidth: 128,
+                zIndex: 10,
+              }}
+            >
+              <Text style={{ color: "#72737f", fontSize: 10, marginBottom: 4 }}>
+                {tooltipData.month.toFixed(0)} meses
               </Text>
-            );
-          })}
+              {tooltipData.childValue != null && (
+                <Text style={{ color: "#ffffff", fontSize: 11, marginBottom: 3 }}>
+                  Filho(a): {tooltipData.childValue.toFixed(decimals)} {unit}
+                  {tooltipData.childDate
+                    ? `\n${format(parseISO(tooltipData.childDate), "dd/MM/yyyy")}`
+                    : ""}
+                </Text>
+              )}
+              <Text style={{ color: COLORS.p50, fontSize: 11, marginBottom: 2 }}>
+                P50: {tooltipData.p50?.toFixed(decimals) ?? "—"}
+              </Text>
+              {percentileMode === 5 && (
+                <>
+                  <Text style={{ color: COLORS.p15, fontSize: 11, marginBottom: 2 }}>
+                    P15: {tooltipData.p15?.toFixed(decimals) ?? "—"}
+                  </Text>
+                  <Text style={{ color: COLORS.p85, fontSize: 11, marginBottom: 2 }}>
+                    P85: {tooltipData.p85?.toFixed(decimals) ?? "—"}
+                  </Text>
+                </>
+              )}
+              <Text style={{ color: COLORS.p3, fontSize: 11, marginBottom: 2 }}>
+                P3: {tooltipData.p3?.toFixed(decimals) ?? "—"}
+              </Text>
+              <Text style={{ color: COLORS.p97, fontSize: 11 }}>
+                P97: {tooltipData.p97?.toFixed(decimals) ?? "—"}
+              </Text>
+            </View>
+          )}
         </View>
       </ScrollView>
 
+      {/* X axis labels */}
+      <View style={{ height: 18, position: "relative", marginLeft: 0 }}>
+        {xTicks.map((m) => {
+          const x = PAD_LEFT + ((m - minMonth) / (maxMonth - minMonth)) * chartW;
+          return (
+            <Text
+              key={m}
+              style={{
+                position: "absolute",
+                left: x - 12,
+                color: COLORS.label,
+                fontSize: 9,
+                width: 28,
+                textAlign: "center",
+              }}
+            >
+              {m}m
+            </Text>
+          );
+        })}
+      </View>
+
       {/* Y axis labels */}
-      <View style={{ position: "absolute", top: 24, left: 0, height: CHART_H }}>
+      <View style={{ position: "absolute", top: TITLE_H, left: 0, height: CHART_H }}>
         {yTicks.map((v, i) => {
           const pct = (v - minVal) / (maxVal - minVal);
           const y = CHART_H - PAD_BOTTOM - pct * (CHART_H - PAD_TOP - PAD_BOTTOM) - 6;

@@ -45,7 +45,7 @@ export function BottomSheetModal({ visible, onClose, children }: Props) {
 
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (_, g) => g.dy > 5,
       onPanResponderMove: (_, g) => {
         if (g.dy > 0) dragY.setValue(g.dy);

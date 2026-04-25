@@ -1,73 +1,111 @@
-import dns from "node:dns/promises";
-import fs from "node:fs";
-import https from "node:https";
-import path from "node:path";
+import { promises as dns } from "node:dns";
+import { existsSync, readFileSync } from "node:fs";
 
-const projectRoot = process.cwd();
-const envPath = path.join(projectRoot, ".env.local");
+function readLocalEnv() {
+  if (!existsSync(".env.local")) return {};
 
-function readEnvFile(filePath) {
-  if (!fs.existsSync(filePath)) {
-    throw new Error(`Arquivo ausente: ${path.relative(projectRoot, filePath)}`);
+  return Object.fromEntries(
+    readFileSync(".env.local", "utf8")
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line && !line.startsWith("#"))
+      .map((line) => {
+        const index = line.indexOf("=");
+        if (index === -1) return [line, ""];
+        const key = line.slice(0, index);
+        const value = line.slice(index + 1).replace(/^['"]|['"]$/g, "");
+        return [key, value];
+      })
+  );
+}
+
+function readAppEnv() {
+  if (!existsSync("app.json")) return {};
+
+  const appConfig = JSON.parse(readFileSync("app.json", "utf8"));
+  const extra = appConfig.expo?.extra ?? {};
+  return {
+    EXPO_PUBLIC_SUPABASE_URL:
+      extra.supabaseUrl ??
+      extra.EXPO_PUBLIC_SUPABASE_URL ??
+      extra.supabase?.url,
+    EXPO_PUBLIC_SUPABASE_ANON_KEY:
+      extra.supabaseAnonKey ??
+      extra.EXPO_PUBLIC_SUPABASE_ANON_KEY ??
+      extra.supabase?.anonKey ??
+      extra.supabase?.anon_key,
+  };
+}
+
+function firstNonEmpty(...values) {
+  return values.find((value) => typeof value === "string" && value.trim())?.trim();
+}
+
+function normalizeSupabaseUrl(value) {
+  const raw = value?.trim().replace(/\/+$/, "");
+  if (!raw) throw new Error("EXPO_PUBLIC_SUPABASE_URL nao configurada.");
+
+  if (/^[a-z0-9]{20}$/.test(raw)) return `https://${raw}.supabase.co`;
+  if (/^[a-z0-9.-]+\.supabase\.co$/.test(raw)) return `https://${raw}`;
+  if (/^https?:\/\//.test(raw)) {
+    const parsed = new URL(raw);
+    const isLocalhost = ["localhost", "127.0.0.1"].includes(parsed.hostname);
+    if (parsed.protocol !== "https:" && !isLocalhost) {
+      throw new Error("EXPO_PUBLIC_SUPABASE_URL deve usar https em producao.");
+    }
+    if (parsed.pathname !== "/" || parsed.search || parsed.hash) {
+      throw new Error("EXPO_PUBLIC_SUPABASE_URL deve conter apenas a origem.");
+    }
+    return parsed.origin;
   }
 
-  const content = fs.readFileSync(filePath, "utf8");
-  return content
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line && !line.startsWith("#"))
-    .reduce((acc, line) => {
-      const [key, ...rest] = line.split("=");
-      acc[key] = rest.join("=").trim();
-      return acc;
-    }, {});
+  throw new Error(
+    "EXPO_PUBLIC_SUPABASE_URL invalida. Use https://<project-ref>.supabase.co"
+  );
 }
 
-function getJson(url) {
-  return new Promise((resolve, reject) => {
-    https
-      .get(
-        url,
-        {
-          headers: {
-            apikey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? "",
-            Authorization: `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? ""}`,
-          },
-        },
-        (response) => {
-          let body = "";
-          response.on("data", (chunk) => {
-            body += chunk;
-          });
-          response.on("end", () => {
-            resolve({
-              statusCode: response.statusCode ?? 0,
-              body,
-            });
-          });
-        }
-      )
-      .on("error", reject);
-  });
+const localEnv = readLocalEnv();
+const appEnv = readAppEnv();
+const supabaseUrl = normalizeSupabaseUrl(
+  firstNonEmpty(
+    process.env.EXPO_PUBLIC_SUPABASE_URL,
+    localEnv.EXPO_PUBLIC_SUPABASE_URL,
+    appEnv.EXPO_PUBLIC_SUPABASE_URL
+  )
+);
+const supabaseAnonKey =
+  firstNonEmpty(
+    process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
+    localEnv.EXPO_PUBLIC_SUPABASE_ANON_KEY,
+    appEnv.EXPO_PUBLIC_SUPABASE_ANON_KEY
+  );
+const { host } = new URL(supabaseUrl);
+
+if (!supabaseAnonKey) {
+  throw new Error("EXPO_PUBLIC_SUPABASE_ANON_KEY nao configurada.");
 }
 
-const env = readEnvFile(envPath);
-const supabaseUrl = env.EXPO_PUBLIC_SUPABASE_URL;
-const anonKey = env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+console.log(`Supabase URL: ${supabaseUrl}`);
+console.log(`Supabase host: ${host}`);
 
-if (!supabaseUrl || !anonKey) {
-  throw new Error("EXPO_PUBLIC_SUPABASE_URL e EXPO_PUBLIC_SUPABASE_ANON_KEY sao obrigatorias em .env.local");
+try {
+  const records = await dns.lookup(host, { all: true });
+  console.log(`DNS OK: ${records.map((record) => record.address).join(", ")}`);
+} catch (err) {
+  const message = err instanceof Error ? err.message : String(err);
+  throw new Error(`DNS falhou para ${host}: ${message}`);
 }
 
-process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY = anonKey;
+const response = await fetch(`${supabaseUrl}/auth/v1/health`, {
+  headers: {
+    apikey: supabaseAnonKey,
+  },
+});
 
-const hostname = new URL(supabaseUrl).hostname;
-const dnsResult = await dns.lookup(hostname);
-const health = await getJson(`${supabaseUrl}/rest/v1/`);
+console.log(`Auth health HTTP: ${response.status}`);
 
-if (health.statusCode < 200 || health.statusCode >= 500) {
-  throw new Error(`Supabase respondeu com status inesperado: ${health.statusCode}`);
+if (!response.ok) {
+  throw new Error(
+    `Supabase Auth respondeu ${response.status}. Confira URL e anon key.`
+  );
 }
-
-console.log(`Supabase DNS OK: ${hostname} -> ${dnsResult.address}`);
-console.log(`Supabase HTTP OK: ${health.statusCode}`);

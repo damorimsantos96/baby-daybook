@@ -10,7 +10,7 @@ import {
   vec,
 } from "@shopify/react-native-skia";
 import { format, parseISO } from "date-fns";
-import { ageInMonths, getPercentileCurve } from "@/utils/growthCurves";
+import { ageInMonths, getPercentileCurve, getValuePercentile } from "@/utils/growthCurves";
 import type {
   GrowthMetric,
   GrowthStandard,
@@ -86,6 +86,7 @@ interface TooltipData {
   p85: number | null;
   childValue: number | null;
   childDate: string | null;
+  childPercentile: string | null;
 }
 
 interface Props {
@@ -142,17 +143,23 @@ export function GrowthChart({
   );
 
   const { minMonth, maxMonth, canvasW } = useMemo(() => {
-    const allMonths = [
-      ...curve.map((p) => p.month),
-      ...dataPoints.map((d) => d.month),
-    ];
-    if (!allMonths.length) return { minMonth: 0, maxMonth: 60, canvasW: containerWidth ?? 300 };
-    const [lo, hi] = range(allMonths);
-    const buffered = Math.max(hi + 6, lo + 12);
-    const spanW = (buffered - lo) * MONTH_WIDTH;
+    if (!curve.length) return { minMonth: 0, maxMonth: 60, canvasW: containerWidth ?? 300 };
+    const curveMin = curve[0].month;
+    const curveMax = curve[curve.length - 1].month;
+    const lastDataMonth = dataPoints.length > 0
+      ? dataPoints[dataPoints.length - 1].month
+      : curveMax;
+    const lo = curveMin;
+    const hi = Math.min(lastDataMonth, curveMax);
+    const spanW = (hi - lo) * MONTH_WIDTH;
     const w = Math.max(spanW, containerWidth ?? 300);
-    return { minMonth: lo, maxMonth: buffered, canvasW: w };
+    return { minMonth: lo, maxMonth: hi, canvasW: w };
   }, [curve, dataPoints, containerWidth]);
+
+  const clippedCurve = useMemo(
+    () => curve.filter((p) => p.month <= maxMonth),
+    [curve, maxMonth]
+  );
 
   const chartW = canvasW - PAD_LEFT - PAD_RIGHT;
 
@@ -171,9 +178,9 @@ export function GrowthChart({
   // ─── Build percentile paths ──────────────────────────────────────────────
 
   function buildPath(getter: (p: PercentilePoint) => number) {
-    if (!curve.length) return null;
+    if (!clippedCurve.length) return null;
     const path = Skia.Path.Make();
-    curve.forEach((pt, i) => {
+    clippedCurve.forEach((pt, i) => {
       const x = toX(pt.month, minMonth, maxMonth, chartW);
       const y = toY(getter(pt), minVal, maxVal);
       if (i === 0) path.moveTo(x, y);
@@ -232,6 +239,7 @@ export function GrowthChart({
           )
         : null;
 
+    const nearestMatch = nearest && Math.abs(nearest.month - clamped) <= 4 ? nearest : null;
     setTooltipData({
       svgX: locationX,
       month: clamped,
@@ -240,8 +248,11 @@ export function GrowthChart({
       p97: interp(curve, clamped, (p) => p.p97),
       p15: interp(curve, clamped, (p) => p.p15),
       p85: interp(curve, clamped, (p) => p.p85),
-      childValue: nearest && Math.abs(nearest.month - clamped) <= 4 ? nearest.value : null,
-      childDate:  nearest && Math.abs(nearest.month - clamped) <= 4 ? nearest.date  : null,
+      childValue: nearestMatch ? nearestMatch.value : null,
+      childDate:  nearestMatch ? nearestMatch.date  : null,
+      childPercentile: nearestMatch
+        ? getValuePercentile(metric, sex, standard, nearestMatch.month, nearestMatch.value)
+        : null,
     });
   }
 
@@ -347,7 +358,7 @@ export function GrowthChart({
                 padding: 10,
                 borderWidth: 1,
                 borderColor: "#2c2d36",
-                minWidth: 128,
+                minWidth: 155,
                 zIndex: 10,
               }}
             >
@@ -355,12 +366,17 @@ export function GrowthChart({
                 {tooltipData.month.toFixed(0)} meses
               </Text>
               {tooltipData.childValue != null && (
-                <Text style={{ color: "#ffffff", fontSize: 11, marginBottom: 3 }}>
-                  Filho(a): {tooltipData.childValue.toFixed(decimals)} {unit}
-                  {tooltipData.childDate
-                    ? `\n${format(parseISO(tooltipData.childDate), "dd/MM/yyyy")}`
-                    : ""}
-                </Text>
+                <>
+                  <Text style={{ color: "#ffffff", fontSize: 12, fontWeight: "600" }}>
+                    {tooltipData.childValue.toFixed(decimals)} {unit}
+                    {tooltipData.childPercentile ? `  ${tooltipData.childPercentile}` : ""}
+                  </Text>
+                  {tooltipData.childDate ? (
+                    <Text style={{ color: "#72737f", fontSize: 9, marginBottom: 4 }}>
+                      {format(parseISO(tooltipData.childDate), "dd/MM/yyyy")}
+                    </Text>
+                  ) : <View style={{ marginBottom: 4 }} />}
+                </>
               )}
               <Text style={{ color: COLORS.p50, fontSize: 11, marginBottom: 2 }}>
                 P50: {tooltipData.p50?.toFixed(decimals) ?? "—"}
@@ -375,12 +391,14 @@ export function GrowthChart({
                   </Text>
                 </>
               )}
-              <Text style={{ color: COLORS.p3, fontSize: 11, marginBottom: 2 }}>
-                P3: {tooltipData.p3?.toFixed(decimals) ?? "—"}
-              </Text>
-              <Text style={{ color: COLORS.p97, fontSize: 11 }}>
-                P97: {tooltipData.p97?.toFixed(decimals) ?? "—"}
-              </Text>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 8 }}>
+                <Text style={{ color: COLORS.p3, fontSize: 11 }}>
+                  P3: {tooltipData.p3?.toFixed(decimals) ?? "—"}
+                </Text>
+                <Text style={{ color: COLORS.p97, fontSize: 11 }}>
+                  P97: {tooltipData.p97?.toFixed(decimals) ?? "—"}
+                </Text>
+              </View>
             </View>
           )}
         </View>

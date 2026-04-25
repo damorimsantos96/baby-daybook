@@ -13,13 +13,13 @@ import {
 import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { format, parseISO, differenceInMonths, differenceInYears } from "date-fns";
-import { ageInMonths } from "@/utils/growthCurves";
+import { ageInMonths, getPercentileCurve, getValuePercentile } from "@/utils/growthCurves";
 import { Ionicons } from "@expo/vector-icons";
 import { useChild, useChildPhotoUrl } from "@/hooks/useChildren";
 import { useMeasurements, useUpsertMeasurement, useDeleteMeasurement } from "@/hooks/useMeasurements";
 import { BottomSheetModal } from "@/components/ui/BottomSheetModal";
 import { GrowthChart } from "@/components/charts/GrowthChart";
-import type { GrowthStandard, Measurement, PercentileMode } from "@/types";
+import type { GrowthMetric, GrowthStandard, Measurement, PercentileMode, Sex } from "@/types";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -67,6 +67,79 @@ function fromMeasurement(m: Measurement): MeasForm {
     head: m.head_circumference_cm != null ? String(m.head_circumference_cm) : "",
     notes: m.notes ?? "",
   };
+}
+
+// ─── Measurement summary card ─────────────────────────────────────────────────
+
+interface SummaryItem {
+  label: string;
+  m: Measurement | null;
+  value: number | null;
+  metric: GrowthMetric;
+  unit: string;
+  decimals: number;
+  std: GrowthStandard;
+}
+
+function MeasurementSummary({
+  measurements,
+  birthDate,
+  sex,
+  standard,
+}: {
+  measurements: Measurement[];
+  birthDate: string;
+  sex: Sex;
+  standard: GrowthStandard;
+}) {
+  const items: SummaryItem[] = useMemo(() => {
+    const sorted = [...measurements].sort((a, b) => b.date.localeCompare(a.date));
+    const lw = sorted.find((m) => m.weight_kg != null) ?? null;
+    const lh = sorted.find((m) => m.height_cm != null) ?? null;
+    const lc = sorted.find((m) => m.head_circumference_cm != null) ?? null;
+    return [
+      { label: "Peso", m: lw, value: lw?.weight_kg ?? null, metric: "weight", unit: "kg", decimals: 2, std: standard },
+      { label: "Altura", m: lh, value: lh?.height_cm ?? null, metric: "height", unit: "cm", decimals: 1, std: standard },
+      { label: "Cabeça", m: lc, value: lc?.head_circumference_cm ?? null, metric: "head", unit: "cm", decimals: 1, std: "WHO" },
+    ];
+  }, [measurements, standard]);
+
+  return (
+    <View style={{ flexDirection: "row", paddingHorizontal: 16, marginBottom: 12, gap: 8 }}>
+      {items.map(({ label, m, value, metric, unit, decimals, std }) => {
+        const month = m ? ageInMonths(birthDate, m.date) : null;
+        const pct =
+          month != null && value != null
+            ? getValuePercentile(metric, sex, std, month, value)
+            : null;
+        return (
+          <View
+            key={label}
+            style={{ flex: 1, backgroundColor: "#1c1d23", borderRadius: 10, padding: 10 }}
+          >
+            <Text style={{ color: "#72737f", fontSize: 10, marginBottom: 4 }}>{label}</Text>
+            {value != null ? (
+              <>
+                <Text style={{ color: "#ecfdf5", fontSize: 13, fontWeight: "700" }}>
+                  {value.toFixed(decimals)} {unit}
+                </Text>
+                {pct ? (
+                  <Text style={{ color: "#10b981", fontSize: 11, marginTop: 1 }}>{pct}</Text>
+                ) : null}
+                {m ? (
+                  <Text style={{ color: "#4a4b58", fontSize: 9, marginTop: 2 }}>
+                    {format(parseISO(m.date), "dd/MM/yy")}
+                  </Text>
+                ) : null}
+              </>
+            ) : (
+              <Text style={{ color: "#4a4b58", fontSize: 14 }}>—</Text>
+            )}
+          </View>
+        );
+      })}
+    </View>
+  );
 }
 
 // ─── Tab toggle ───────────────────────────────────────────────────────────────
@@ -261,6 +334,15 @@ export default function FilhoScreen() {
           <Ionicons name="add" size={22} color="#fff" />
         </Pressable>
       </View>
+
+      {measurements.length > 0 && (
+        <MeasurementSummary
+          measurements={measurements}
+          birthDate={child.birth_date}
+          sex={child.sex}
+          standard={standard}
+        />
+      )}
 
       <TopTabs active={activeTab} onChange={setActiveTab} />
 

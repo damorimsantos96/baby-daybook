@@ -289,3 +289,30 @@ export function interpolateAt(
     p97: lerp(lo.p97, hi.p97),
   };
 }
+
+export function getValuePercentile(
+  metric: GrowthMetric,
+  sex: Sex,
+  standard: GrowthStandard,
+  month: number,
+  value: number
+): string {
+  const curve = getPercentileCurve(metric, sex, standard, 5);
+  const pt = interpolateAt(curve, month);
+  if (!pt) return "";
+  if (value <= pt.p3) return "≤ P3";
+  if (value >= pt.p97) return "≥ P97";
+  const bands: [number, number, number, number][] = [
+    [pt.p3, pt.p15, 3, 15],
+    [pt.p15, pt.p50, 15, 50],
+    [pt.p50, pt.p85, 50, 85],
+    [pt.p85, pt.p97, 85, 97],
+  ];
+  for (const [lo, hi, pLo, pHi] of bands) {
+    if (value >= lo && value <= hi && hi !== lo) {
+      const t = (value - lo) / (hi - lo);
+      return `P${Math.round(pLo + t * (pHi - pLo))}`;
+    }
+  }
+  return "";
+}

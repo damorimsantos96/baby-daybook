@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Text, View } from "react-native";
 import { format, parseISO } from "date-fns";
-import { ageInMonths, getPercentileCurve } from "@/utils/growthCurves";
+import { ageInMonths, getPercentileCurve, getValuePercentile } from "@/utils/growthCurves";
 import type {
   GrowthMetric,
   GrowthStandard,
@@ -92,6 +92,7 @@ interface HoverInfo {
   p85: number | null;
   childValue: number | null;
   childDate: string | null;
+  childPercentile: string | null;
 }
 
 interface Props {
@@ -148,17 +149,23 @@ export function GrowthChart({
   );
 
   const { minMonth, maxMonth, canvasW } = useMemo(() => {
-    const allMonths = [
-      ...curve.map((p) => p.month),
-      ...dataPoints.map((d) => d.month),
-    ];
-    if (!allMonths.length) return { minMonth: 0, maxMonth: 60, canvasW: containerWidth ?? 300 };
-    const [lo, hi] = range(allMonths);
-    const buffered = Math.max(hi + 6, lo + 12);
-    const spanW = (buffered - lo) * MONTH_WIDTH;
+    if (!curve.length) return { minMonth: 0, maxMonth: 60, canvasW: containerWidth ?? 300 };
+    const curveMin = curve[0].month;
+    const curveMax = curve[curve.length - 1].month;
+    const lastDataMonth = dataPoints.length > 0
+      ? dataPoints[dataPoints.length - 1].month
+      : curveMax;
+    const lo = curveMin;
+    const hi = Math.min(lastDataMonth, curveMax);
+    const spanW = (hi - lo) * MONTH_WIDTH;
     const w = Math.max(spanW, containerWidth ?? 300);
-    return { minMonth: lo, maxMonth: buffered, canvasW: w };
+    return { minMonth: lo, maxMonth: hi, canvasW: w };
   }, [curve, dataPoints, containerWidth]);
+
+  const clippedCurve = useMemo(
+    () => curve.filter((p) => p.month <= maxMonth),
+    [curve, maxMonth]
+  );
 
   const chartW = canvasW - PAD_LEFT - PAD_RIGHT;
 
@@ -189,11 +196,11 @@ export function GrowthChart({
 
   if (!curve.length) return null;
 
-  const dP50 = buildD(curve, (p) => p.p50, minMonth, maxMonth, chartW, minVal, maxVal);
-  const dP15 = buildD(curve, (p) => p.p15, minMonth, maxMonth, chartW, minVal, maxVal);
-  const dP85 = buildD(curve, (p) => p.p85, minMonth, maxMonth, chartW, minVal, maxVal);
-  const dP3  = buildD(curve, (p) => p.p3,  minMonth, maxMonth, chartW, minVal, maxVal);
-  const dP97 = buildD(curve, (p) => p.p97, minMonth, maxMonth, chartW, minVal, maxVal);
+  const dP50 = buildD(clippedCurve, (p) => p.p50, minMonth, maxMonth, chartW, minVal, maxVal);
+  const dP15 = buildD(clippedCurve, (p) => p.p15, minMonth, maxMonth, chartW, minVal, maxVal);
+  const dP85 = buildD(clippedCurve, (p) => p.p85, minMonth, maxMonth, chartW, minVal, maxVal);
+  const dP3  = buildD(clippedCurve, (p) => p.p3,  minMonth, maxMonth, chartW, minVal, maxVal);
+  const dP97 = buildD(clippedCurve, (p) => p.p97, minMonth, maxMonth, chartW, minVal, maxVal);
 
   const dChild =
     dataPoints.length >= 2
@@ -223,6 +230,7 @@ export function GrowthChart({
           )
         : null;
 
+    const nearestMatch = nearest && Math.abs(nearest.month - clamped) <= 4 ? nearest : null;
     setHoverInfo({
       svgX,
       month: clamped,
@@ -231,14 +239,17 @@ export function GrowthChart({
       p97: interp(curve, clamped, (p) => p.p97),
       p15: interp(curve, clamped, (p) => p.p15),
       p85: interp(curve, clamped, (p) => p.p85),
-      childValue: nearest && Math.abs(nearest.month - clamped) <= 4 ? nearest.value : null,
-      childDate:  nearest && Math.abs(nearest.month - clamped) <= 4 ? nearest.date  : null,
+      childValue: nearestMatch ? nearestMatch.value : null,
+      childDate:  nearestMatch ? nearestMatch.date  : null,
+      childPercentile: nearestMatch
+        ? getValuePercentile(metric, sex, standard, nearestMatch.month, nearestMatch.value)
+        : null,
     });
   }
 
   const tooltipX = hoverInfo
     ? hoverInfo.svgX > canvasW / 2
-      ? hoverInfo.svgX - 148
+      ? hoverInfo.svgX - 168
       : hoverInfo.svgX + 12
     : 0;
 
@@ -334,9 +345,13 @@ export function GrowthChart({
         )}
 
         {/* Hover tooltip (foreignObject) */}
-        {hoverInfo && (
+        {hoverInfo && (() => {
+          const tooltipH = 70
+            + (hoverInfo.childValue != null ? 36 : 0)
+            + (percentileMode === 5 ? 36 : 0);
+          return (
           // @ts-ignore
-          <foreignObject x={tooltipX} y={PAD_TOP + 4} width={140} height={percentileMode === 5 ? 130 : 100}>
+          <foreignObject x={tooltipX} y={PAD_TOP + 4} width={160} height={tooltipH}>
             {/* @ts-ignore */}
             <div style={{
               background: "#1c1d23",
@@ -353,12 +368,17 @@ export function GrowthChart({
                 {hoverInfo.month.toFixed(0)} meses
               </div>
               {hoverInfo.childValue != null && (
-                <div style={{ color: "#ffffff", marginBottom: 2 }}>
-                  Filho(a): {hoverInfo.childValue.toFixed(decimals)} {unit}
+                <div style={{ marginBottom: 3 }}>
+                  <span style={{ color: "#ffffff", fontWeight: 600 }}>
+                    {hoverInfo.childValue.toFixed(decimals)} {unit}
+                  </span>
+                  {hoverInfo.childPercentile && (
+                    <span style={{ color: "#10b981", marginLeft: 6 }}>{hoverInfo.childPercentile}</span>
+                  )}
                   {hoverInfo.childDate && (
-                    <span style={{ color: "#72737f", fontSize: 10 }}>
-                      {" "}({format(parseISO(hoverInfo.childDate), "dd/MM/yy")})
-                    </span>
+                    <div style={{ color: "#72737f", fontSize: 9 }}>
+                      {format(parseISO(hoverInfo.childDate), "dd/MM/yy")}
+                    </div>
                   )}
                 </div>
               )}
@@ -369,11 +389,14 @@ export function GrowthChart({
                   <div style={{ color: COLORS.p85 }}>P85: {hoverInfo.p85?.toFixed(decimals) ?? "—"}</div>
                 </>
               )}
-              <div style={{ color: COLORS.p3 }}>P3: {hoverInfo.p3?.toFixed(decimals) ?? "—"}</div>
-              <div style={{ color: COLORS.p97 }}>P97: {hoverInfo.p97?.toFixed(decimals) ?? "—"}</div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ color: COLORS.p3 }}>P3: {hoverInfo.p3?.toFixed(decimals) ?? "—"}</span>
+                <span style={{ color: COLORS.p97 }}>P97: {hoverInfo.p97?.toFixed(decimals) ?? "—"}</span>
+              </div>
             </div>
           </foreignObject>
-        )}
+          );
+        })()}
       </svg>
 
       {/* Y axis labels */}

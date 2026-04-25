@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Text, View } from "react-native";
 import { format, parseISO } from "date-fns";
-import { ageInMonths, getPercentileCurve, getValuePercentile } from "@/utils/growthCurves";
+import { ageInMonthsPrecise, getPercentileCurve, getValuePercentile } from "@/utils/growthCurves";
 import type {
   GrowthMetric,
   GrowthStandard,
@@ -130,7 +130,7 @@ export function GrowthChart({
         return m.head_circumference_cm != null;
       })
       .map((m) => ({
-        month: ageInMonths(birthDate, m.date),
+        month: ageInMonthsPrecise(birthDate, m.date),
         value:
           metric === "weight"
             ? (m.weight_kg as number)

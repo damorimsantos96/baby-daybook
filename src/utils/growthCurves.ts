@@ -1,10 +1,24 @@
-import { differenceInCalendarMonths, parseISO } from "date-fns";
+import { addMonths, differenceInCalendarMonths, differenceInDays, parseISO } from "date-fns";
 import type { GrowthMetric, GrowthStandard, PercentileMode, PercentilePoint, Sex } from "@/types";
 
 // ─── Age helper ───────────────────────────────────────────────────────────────
 
 export function ageInMonths(birthDate: string, atDate: string): number {
   return differenceInCalendarMonths(parseISO(atDate), parseISO(birthDate));
+}
+
+export function ageInMonthsPrecise(birthDate: string, atDate: string): number {
+  const birth = parseISO(birthDate);
+  const target = parseISO(atDate);
+  const wholeMonths = differenceInCalendarMonths(target, birth);
+  const monthStart = addMonths(birth, wholeMonths);
+  const nextMonthStart = addMonths(monthStart, 1);
+  const daysIntoMonth = differenceInDays(target, monthStart);
+  const daysInMonth = differenceInDays(nextMonthStart, monthStart);
+
+  if (daysInMonth <= 0) return wholeMonths;
+
+  return wholeMonths + daysIntoMonth / daysInMonth;
 }
 
 // ─── WHO 0–60 months ─────────────────────────────────────────────────────────

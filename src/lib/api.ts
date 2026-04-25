@@ -1,3 +1,4 @@
+import { Platform } from "react-native";
 import { supabase } from "./supabase";
 import type { Child, Measurement, UserProfile, AppVersionConfig } from "@/types";
 
@@ -89,7 +90,10 @@ export async function uploadChildPhoto(
   const path = `${user.id}/${childId}.jpg`;
   const contentType = mimeType ?? "image/jpeg";
   const response = await fetch(uri);
-  const file = await response.arrayBuffer();
+  const file =
+    Platform.OS === "web"
+      ? new File([await response.blob()], `${childId}.jpg`, { type: contentType })
+      : await response.arrayBuffer();
 
   const { error } = await supabase.storage
     .from("child-photos")

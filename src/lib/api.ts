@@ -51,10 +51,20 @@ export async function upsertChild(
 ): Promise<Child> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
-  const payload = { ...child, user_id: user.id };
+  if (child.id) {
+    const { id, ...rest } = child;
+    const { data, error } = await supabase
+      .from("children")
+      .update({ ...rest, user_id: user.id })
+      .eq("id", id)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  }
   const { data, error } = await supabase
     .from("children")
-    .upsert(payload, { onConflict: "id" })
+    .insert({ ...child, user_id: user.id })
     .select()
     .single();
   if (error) throw error;

@@ -117,7 +117,7 @@ export function GrowthChart({
   const decimals = metric === "weight" ? 2 : 1;
 
   const dataPoints = useMemo(() => {
-    return measurements
+    const allMetric = measurements
       .filter((m) => {
         if (metric === "weight") return m.weight_kg != null;
         if (metric === "height") return m.height_cm != null;
@@ -132,9 +132,20 @@ export function GrowthChart({
             ? (m.height_cm as number)
             : (m.head_circumference_cm as number),
         date: m.date,
+        ghost: false,
       }))
-      .filter((d) => standard !== "CDC" || d.month >= 24)
       .sort((a, b) => a.month - b.month);
+
+    if (standard !== "CDC") return allMetric;
+
+    const pre24 = allMetric.filter((d) => d.month < 24);
+    const post24 = allMetric.filter((d) => d.month >= 24);
+
+    if (pre24.length === 0) return post24;
+
+    // Anchor line at left edge using last pre-24m value (no dot rendered)
+    const anchor = pre24[pre24.length - 1];
+    return [{ ...anchor, month: 24, ghost: true }, ...post24];
   }, [measurements, birthDate, metric, standard]);
 
   const curve = useMemo(
@@ -150,7 +161,10 @@ export function GrowthChart({
       ? dataPoints[dataPoints.length - 1].month
       : curveMax;
     const lo = curveMin;
-    const hi = Math.min(lastDataMonth, curveMax);
+    // Extend hi to the next curve point at or beyond lastDataMonth so child
+    // data never appears past the reference curves.
+    const nextCurvePt = curve.find((p) => p.month >= lastDataMonth);
+    const hi = nextCurvePt ? nextCurvePt.month : curveMax;
     const spanW = (hi - lo) * MONTH_WIDTH;
     const w = Math.max(spanW, containerWidth ?? 300);
     return { minMonth: lo, maxMonth: hi, canvasW: w };
@@ -164,16 +178,18 @@ export function GrowthChart({
   const chartW = canvasW - PAD_LEFT - PAD_RIGHT;
 
   const { minVal, maxVal } = useMemo(() => {
+    // Use clippedCurve (not full curve) so CDC's 24–240m range doesn't
+    // inflate the Y axis when only showing a 24–55m window.
     const allVals = [
-      ...curve.map((p) => p.p3),
-      ...curve.map((p) => p.p97),
+      ...clippedCurve.map((p) => p.p3),
+      ...clippedCurve.map((p) => p.p97),
       ...dataPoints.map((d) => d.value),
     ];
     if (!allVals.length) return { minVal: 0, maxVal: 20 };
     const [lo, hi] = range(allVals);
     const pad = (hi - lo) * 0.1 || 1;
     return { minVal: lo - pad, maxVal: hi + pad };
-  }, [curve, dataPoints]);
+  }, [clippedCurve, dataPoints]);
 
   // ─── Build percentile paths ──────────────────────────────────────────────
 
@@ -320,8 +336,8 @@ export function GrowthChart({
               <Path path={childPath} color={COLORS.child} style="stroke" strokeWidth={2} />
             )}
 
-            {/* Child dots */}
-            {dataPoints.map((pt, i) => {
+            {/* Child dots — skip ghost anchor */}
+            {dataPoints.filter((pt) => !pt.ghost).map((pt, i) => {
               const x = toX(pt.month, minMonth, maxMonth, chartW);
               const y = toY(pt.value, minVal, maxVal);
               return <Circle key={i} cx={x} cy={y} r={5} color={COLORS.dot} />;

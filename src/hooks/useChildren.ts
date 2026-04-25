@@ -24,13 +24,23 @@ export function useChild(id: string) {
   });
 }
 
-export function useChildPhotoUrl(childId: string, hasPhoto = true) {
-  return useQuery({
+function isDirectPhotoUrl(photoUrl?: string | null): photoUrl is string {
+  return !!photoUrl && /^(data:|https?:\/\/)/.test(photoUrl);
+}
+
+export function useChildPhotoUrl(childId: string, photoUrl?: string | null) {
+  const directPhotoUrl = isDirectPhotoUrl(photoUrl) ? photoUrl : null;
+  const query = useQuery({
     queryKey: ["child-photo", childId],
     queryFn: () => getChildPhotoUrl(childId),
-    enabled: !!childId && hasPhoto,
+    enabled: !!childId && !!photoUrl && !directPhotoUrl,
     staleTime: 1000 * 60 * 20, // re-fetch every 20 min (URL expires in 24h)
   });
+
+  return {
+    ...query,
+    data: directPhotoUrl ?? query.data ?? null,
+  };
 }
 
 export function useUpsertChild() {
@@ -50,11 +60,15 @@ export function useUploadChildPhoto() {
       childId,
       uri,
       mimeType,
+      base64Data,
+      webFile,
     }: {
       childId: string;
       uri: string;
       mimeType?: string;
-    }) => uploadChildPhoto(childId, uri, mimeType),
+      base64Data?: string;
+      webFile?: File | null;
+    }) => uploadChildPhoto({ childId, uri, mimeType, base64Data, webFile }),
     onSuccess: (_data, { childId }) => {
       qc.invalidateQueries({ queryKey: ["child-photo", childId] });
     },

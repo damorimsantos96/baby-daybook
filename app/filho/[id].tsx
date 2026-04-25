@@ -233,7 +233,7 @@ function TogglePill<T extends string>({
 export default function FilhoScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { data: child } = useChild(id);
-  const { data: photoUrl } = useChildPhotoUrl(id);
+  const { data: photoUrl } = useChildPhotoUrl(id, child?.photo_url ?? null);
   const { data: measurements = [], isLoading } = useMeasurements(id);
 
   const upsertMeasurement = useUpsertMeasurement(id);

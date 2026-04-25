@@ -79,6 +79,11 @@ const supabaseAnonKey =
     localEnv.EXPO_PUBLIC_SUPABASE_ANON_KEY,
     appEnv.EXPO_PUBLIC_SUPABASE_ANON_KEY
   );
+const supabaseServiceRoleKey =
+  firstNonEmpty(
+    process.env.SUPABASE_SERVICE_ROLE_KEY,
+    localEnv.SUPABASE_SERVICE_ROLE_KEY
+  );
 const { host } = new URL(supabaseUrl);
 
 if (!supabaseAnonKey) {
@@ -108,4 +113,33 @@ if (!response.ok) {
   throw new Error(
     `Supabase Auth respondeu ${response.status}. Confira URL e anon key.`
   );
+}
+
+if (!supabaseServiceRoleKey) {
+  console.log("Storage bucket check skipped: SUPABASE_SERVICE_ROLE_KEY ausente.");
+} else {
+  const storageResponse = await fetch(`${supabaseUrl}/storage/v1/bucket`, {
+    headers: {
+      apikey: supabaseServiceRoleKey,
+      Authorization: `Bearer ${supabaseServiceRoleKey}`,
+    },
+  });
+
+  console.log(`Storage buckets HTTP: ${storageResponse.status}`);
+
+  if (!storageResponse.ok) {
+    throw new Error(
+      `Storage API respondeu ${storageResponse.status}. Confira service role key e bucket child-photos.`
+    );
+  }
+
+  const buckets = await storageResponse.json();
+  const hasChildPhotos = Array.isArray(buckets) &&
+    buckets.some((bucket) => bucket?.id === "child-photos" || bucket?.name === "child-photos");
+
+  if (!hasChildPhotos) {
+    throw new Error("Storage bucket child-photos nao encontrado.");
+  }
+
+  console.log("Storage bucket OK: child-photos");
 }

@@ -304,6 +304,18 @@ export async function fetchMeasurements(childId: string): Promise<Measurement[]>
   return data ?? [];
 }
 
+export async function fetchMeasurementsForChildren(childIds: string[]): Promise<Measurement[]> {
+  if (childIds.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from("measurements")
+    .select("*")
+    .in("child_id", childIds)
+    .order("date", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
 export async function upsertMeasurement(
   m: Partial<Measurement> & { child_id: string; date: string }
 ): Promise<Measurement> {

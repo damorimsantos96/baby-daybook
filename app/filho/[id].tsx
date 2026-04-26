@@ -15,10 +15,16 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { format, parseISO, differenceInMonths, differenceInYears } from "date-fns";
 import { ageInMonths, getP50EquivalentAge, getValuePercentile } from "@/utils/growthCurves";
 import { Ionicons } from "@expo/vector-icons";
-import { useChild, useChildPhotoUrl } from "@/hooks/useChildren";
-import { useMeasurements, useUpsertMeasurement, useDeleteMeasurement } from "@/hooks/useMeasurements";
+import { useChild, useChildPhotoUrl, useChildren } from "@/hooks/useChildren";
+import {
+  useMeasurements,
+  useMeasurementsForChildren,
+  useUpsertMeasurement,
+  useDeleteMeasurement,
+} from "@/hooks/useMeasurements";
 import { BottomSheetModal } from "@/components/ui/BottomSheetModal";
 import { GrowthChart } from "@/components/charts/GrowthChart";
+import { ComparisonGrowthChart } from "@/components/charts/ComparisonGrowthChart";
 import type { GrowthMetric, GrowthStandard, Measurement, PercentileMode, Sex } from "@/types";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -239,6 +245,7 @@ function TogglePill<T extends string>({
 export default function FilhoScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { data: child } = useChild(id);
+  const { data: children = [], isLoading: childrenLoading } = useChildren();
   const { data: photoUrl } = useChildPhotoUrl(id, child?.photo_url ?? null);
   const { data: measurements = [], isLoading } = useMeasurements(id);
 
@@ -246,9 +253,29 @@ export default function FilhoScreen() {
   const deleteMeasurement = useDeleteMeasurement(id);
 
   const [activeTab, setActiveTab] = useState<"tabela" | "graficos">("tabela");
+  const [compareAllChildren, setCompareAllChildren] = useState(false);
   const [standard, setStandard] = useState<GrowthStandard>("WHO");
   const [pMode, setPMode] = useState<PercentileMode>(3);
   const [chartContainerWidth, setChartContainerWidth] = useState(0);
+  const allChildIds = useMemo(() => children.map((item) => item.id), [children]);
+  const { data: allMeasurements = [], isLoading: allMeasurementsLoading } =
+    useMeasurementsForChildren(compareAllChildren ? allChildIds : []);
+  const compareChartChildren = useMemo(() => {
+    const byChildId = new Map<string, Measurement[]>();
+
+    allMeasurements.forEach((measurement) => {
+      const current = byChildId.get(measurement.child_id) ?? [];
+      current.push(measurement);
+      byChildId.set(measurement.child_id, current);
+    });
+
+    return children.map((item) => ({
+      child: item,
+      measurements: byChildId.get(item.id) ?? [],
+    }));
+  }, [allMeasurements, children]);
+  const compareChartLoading = compareAllChildren && (childrenLoading || allMeasurementsLoading);
+  const chartHasAnyData = compareAllChildren ? allMeasurements.length > 0 : measurements.length > 0;
 
   const childAgeMonths = useMemo(
     () => (child ? differenceInMonths(new Date(), parseISO(child.birth_date)) : 0),
@@ -442,9 +469,37 @@ export default function FilhoScreen() {
                 value={String(pMode)}
                 onChange={(v) => setPMode(Number(v) as PercentileMode)}
               />
+              <TogglePill<string>
+                options={[
+                  { key: "child", label: "Filho atual" },
+                  { key: "all", label: "Todos os filhos" },
+                ]}
+                value={compareAllChildren ? "all" : "child"}
+                onChange={(value) => setCompareAllChildren(value === "all")}
+              />
             </View>
 
-            {measurements.length === 0 ? (
+            {compareAllChildren && (
+              <View
+                style={{
+                  backgroundColor: "#1c1d23",
+                  borderRadius: 10,
+                  padding: 14,
+                  marginBottom: 16,
+                }}
+              >
+                <Text style={{ color: "#a0a1aa", fontSize: 12, fontWeight: "700" }}>
+                  Todos os filhos
+                </Text>
+                <Text style={{ color: "#72737f", fontSize: 12, marginTop: 4 }}>
+                  Compara por percentil ajustado por idade e sexo. Janela corta no menor intervalo de idade em comum entre filhos com dados.
+                </Text>
+              </View>
+            )}
+
+            {compareChartLoading ? (
+              <ActivityIndicator color="#10b981" style={{ marginTop: 40 }} />
+            ) : !chartHasAnyData ? (
               <View style={{ alignItems: "center", marginTop: 40 }}>
                 <Ionicons name="analytics-outline" size={48} color="#2c2d36" />
                 <Text style={{ color: "#72737f", marginTop: 12, fontSize: 14 }}>
@@ -453,18 +508,31 @@ export default function FilhoScreen() {
               </View>
             ) : (
               <>
-                <GrowthChart
-                  metric="weight"
-                  label="Peso"
-                  unit="kg"
-                  birthDate={child.birth_date}
-                  sex={child.sex}
-                  measurements={measurements}
-                  standard={standard}
-                  percentileMode={pMode}
-                  containerWidth={chartContainerWidth}
-                />
-                {standard === "WHO2007" && hasWeightBeyondWho2007 && (
+                {compareAllChildren ? (
+                  <ComparisonGrowthChart
+                    children={compareChartChildren}
+                    currentChildId={child.id}
+                    metric="weight"
+                    label="Peso"
+                    unit="kg"
+                    standard={standard}
+                    percentileMode={pMode}
+                    containerWidth={chartContainerWidth}
+                  />
+                ) : (
+                  <GrowthChart
+                    metric="weight"
+                    label="Peso"
+                    unit="kg"
+                    birthDate={child.birth_date}
+                    sex={child.sex}
+                    measurements={measurements}
+                    standard={standard}
+                    percentileMode={pMode}
+                    containerWidth={chartContainerWidth}
+                  />
+                )}
+                {standard === "WHO2007" && (compareAllChildren || hasWeightBeyondWho2007) && (
                   <View
                     style={{
                       backgroundColor: "#1c1d23",
@@ -479,18 +547,42 @@ export default function FilhoScreen() {
                     </Text>
                   </View>
                 )}
-                <GrowthChart
-                  metric="height"
-                  label="Altura / Comprimento"
-                  unit="cm"
-                  birthDate={child.birth_date}
-                  sex={child.sex}
-                  measurements={measurements}
-                  standard={standard}
-                  percentileMode={pMode}
-                  containerWidth={chartContainerWidth}
-                />
-                {standard === "WHO" && (
+                {compareAllChildren ? (
+                  <ComparisonGrowthChart
+                    children={compareChartChildren}
+                    currentChildId={child.id}
+                    metric="height"
+                    label="Altura / Comprimento"
+                    unit="cm"
+                    standard={standard}
+                    percentileMode={pMode}
+                    containerWidth={chartContainerWidth}
+                  />
+                ) : (
+                  <GrowthChart
+                    metric="height"
+                    label="Altura / Comprimento"
+                    unit="cm"
+                    birthDate={child.birth_date}
+                    sex={child.sex}
+                    measurements={measurements}
+                    standard={standard}
+                    percentileMode={pMode}
+                    containerWidth={chartContainerWidth}
+                  />
+                )}
+                {standard === "WHO" && (compareAllChildren ? (
+                  <ComparisonGrowthChart
+                    children={compareChartChildren}
+                    currentChildId={child.id}
+                    metric="head"
+                    label="CircunferÃªncia da CabeÃ§a"
+                    unit="cm"
+                    standard={standard}
+                    percentileMode={pMode}
+                    containerWidth={chartContainerWidth}
+                  />
+                ) : (
                   <GrowthChart
                     metric="head"
                     label="Circunferência da Cabeça"
@@ -502,7 +594,7 @@ export default function FilhoScreen() {
                     percentileMode={pMode}
                     containerWidth={chartContainerWidth}
                   />
-                )}
+                ))}
                 {standard === "WHO2007" && (
                   <View
                     style={{

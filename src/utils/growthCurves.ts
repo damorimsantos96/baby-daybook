@@ -147,6 +147,13 @@ export function getReferenceRange(metric: GrowthMetric, standard: GrowthStandard
   return getMeta(metric, standard);
 }
 
+export function getProjectionRange(metric: GrowthMetric): ReferenceRange | null {
+  if (metric === "head") return { startMonth: 0, endMonth: 60, label: "0-5y" };
+  if (metric === "height") return { startMonth: 0, endMonth: 228, label: "0-19y" };
+  if (metric === "weight") return { startMonth: 0, endMonth: 120, label: "0-10y" };
+  return null;
+}
+
 export function getStandardLabel(standard: GrowthStandard): string {
   return standard === "WHO" ? "WHO 0-5y" : "WHO 5-19y";
 }
@@ -208,7 +215,7 @@ export function formatPercentileLabel(percentile: number): string {
   return `P${Math.round(percentile)}`;
 }
 
-function formatAgeMonths(totalMonths: number): string {
+export function formatAgeMonths(totalMonths: number): string {
   const safeMonths = Math.max(0, totalMonths);
   const years = Math.floor(safeMonths / 12);
   const months = safeMonths % 12;
@@ -272,4 +279,104 @@ export function getP50EquivalentInfo(
     ageLabel: formatAgeMonths(equivalentAgeMonths),
     deltaLabel: formatSignedAgeMonths(Math.round(equivalentAgeMonths - actualMonth)),
   };
+}
+
+function inverseNormalCdf(probability: number): number {
+  if (!(probability > 0 && probability < 1)) {
+    if (probability === 0) return Number.NEGATIVE_INFINITY;
+    if (probability === 1) return Number.POSITIVE_INFINITY;
+    return Number.NaN;
+  }
+
+  const a = [
+    -39.69683028665376,
+    220.9460984245205,
+    -275.9285104469687,
+    138.357751867269,
+    -30.66479806614716,
+    2.506628277459239,
+  ];
+  const b = [
+    -54.47609879822406,
+    161.5858368580409,
+    -155.6989798598866,
+    66.80131188771972,
+    -13.28068155288572,
+  ];
+  const c = [
+    -0.007784894002430293,
+    -0.3223964580411365,
+    -2.400758277161838,
+    -2.549732539343734,
+    4.374664141464968,
+    2.938163982698783,
+  ];
+  const d = [
+    0.007784695709041462,
+    0.3224671290700398,
+    2.445134137142996,
+    3.754408661907416,
+  ];
+  const pLow = 0.02425;
+  const pHigh = 1 - pLow;
+
+  if (probability < pLow) {
+    const q = Math.sqrt(-2 * Math.log(probability));
+    return (
+      (((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) /
+      ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1)
+    );
+  }
+
+  if (probability > pHigh) {
+    const q = Math.sqrt(-2 * Math.log(1 - probability));
+    return -(
+      (((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) /
+      ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1)
+    );
+  }
+
+  const q = probability - 0.5;
+  const r = q * q;
+  return (
+    (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q /
+    (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1)
+  );
+}
+
+function getProjectionStandard(metric: GrowthMetric, month: number): GrowthStandard | null {
+  if (month >= 0 && month <= 60) return "WHO";
+  if (metric === "head") return null;
+  if (metric === "weight" && month >= 61 && month <= 120) return "WHO2007";
+  if (metric === "height" && month >= 61 && month <= 228) return "WHO2007";
+  return null;
+}
+
+export function getObservedPercentileNumber(
+  metric: GrowthMetric,
+  sex: Sex,
+  month: number,
+  value: number
+): number | null {
+  const standard = getProjectionStandard(metric, month);
+  if (!standard) return null;
+  return getValuePercentileNumber(metric, sex, standard, month, value);
+}
+
+export function getProjectedValueAtPercentile(
+  metric: GrowthMetric,
+  sex: Sex,
+  month: number,
+  percentile: number
+): number | null {
+  const standard = getProjectionStandard(metric, month);
+  if (!standard) return null;
+
+  const row = interpolateRow(getTable(metric, sex, standard), month);
+  if (!row) return null;
+
+  const clampedPercentile = Math.max(0.0001, Math.min(99.9999, percentile)) / 100;
+  const z = inverseNormalCdf(clampedPercentile);
+  if (!Number.isFinite(z)) return null;
+  return lmsValue(row, z);
 }

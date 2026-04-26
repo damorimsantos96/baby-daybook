@@ -4,6 +4,7 @@ import { Canvas, Circle, DashPathEffect, Line, Path, Skia, vec } from "@shopify/
 import { format, parseISO } from "date-fns";
 import {
   ageInMonthsPrecise,
+  getP50EquivalentAge,
   getPercentileCurve,
   getReferenceCaption,
   getReferenceRange,
@@ -79,6 +80,7 @@ function interpolate(
 
 interface TooltipData {
   childDate: string | null;
+  childP50AgeEquiv: string | null;
   childPercentile: string | null;
   childValue: number | null;
   month: number;
@@ -264,6 +266,9 @@ export function GrowthChart({
 
     setTooltipData({
       childDate: matchedPoint ? matchedPoint.date : null,
+      childP50AgeEquiv: matchedPoint
+        ? getP50EquivalentAge(metric, sex, matchedPoint.value)
+        : null,
       childPercentile: matchedPoint
         ? getValuePercentile(metric, sex, standard, matchedPoint.month, matchedPoint.value)
         : null,
@@ -386,8 +391,13 @@ export function GrowthChart({
                     {tooltipData.childValue.toFixed(decimals)} {unit}
                     {tooltipData.childPercentile ? `  ${tooltipData.childPercentile}` : ""}
                   </Text>
+                  {tooltipData.childP50AgeEquiv ? (
+                    <Text style={{ color: "#72737f", fontSize: 9, marginTop: 1 }}>
+                      P50 aos {tooltipData.childP50AgeEquiv}
+                    </Text>
+                  ) : null}
                   {tooltipData.childDate ? (
-                    <Text style={{ color: "#72737f", fontSize: 9, marginBottom: 4 }}>
+                    <Text style={{ color: "#72737f", fontSize: 9, marginBottom: 4, marginTop: 1 }}>
                       {format(parseISO(tooltipData.childDate), "dd/MM/yyyy")}
                     </Text>
                   ) : (

@@ -13,7 +13,7 @@ import {
 import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { format, parseISO, differenceInMonths, differenceInYears } from "date-fns";
-import { ageInMonths, getValuePercentile } from "@/utils/growthCurves";
+import { ageInMonths, getP50EquivalentAge, getValuePercentile } from "@/utils/growthCurves";
 import { Ionicons } from "@expo/vector-icons";
 import { useChild, useChildPhotoUrl } from "@/hooks/useChildren";
 import { useMeasurements, useUpsertMeasurement, useDeleteMeasurement } from "@/hooks/useMeasurements";
@@ -112,6 +112,7 @@ function MeasurementSummary({
           month != null && value != null
             ? getValuePercentile(metric, sex, std, month, value)
             : null;
+        const p50Age = value != null ? getP50EquivalentAge(metric, sex, value) : null;
         return (
           <View
             key={label}
@@ -125,6 +126,11 @@ function MeasurementSummary({
                 </Text>
                 {pct ? (
                   <Text style={{ color: "#10b981", fontSize: 11, marginTop: 1 }}>{pct}</Text>
+                ) : null}
+                {p50Age ? (
+                  <Text style={{ color: "#72737f", fontSize: 9, marginTop: 1 }}>
+                    P50 aos {p50Age}
+                  </Text>
                 ) : null}
                 {m ? (
                   <Text style={{ color: "#4a4b58", fontSize: 9, marginTop: 2 }}>

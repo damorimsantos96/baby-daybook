@@ -191,3 +191,34 @@ export function getValuePercentile(
   if (percentile >= 99.5) return "P99+";
   return `P${Math.round(percentile)}`;
 }
+
+export function getP50EquivalentAge(
+  metric: GrowthMetric,
+  sex: Sex,
+  value: number
+): string | null {
+  const whoRows = getTable(metric, sex, "WHO");
+  const who2007Rows = metric !== "head" ? getTable(metric, sex, "WHO2007") : [];
+  const table: readonly LmsRow[] = [...whoRows, ...who2007Rows];
+
+  if (!table.length) return null;
+
+  for (let i = 0; i < table.length - 1; i++) {
+    const mA = table[i][2];
+    const mB = table[i + 1][2];
+    const monthA = table[i][0];
+    const monthB = table[i + 1][0];
+
+    if (mA <= value && value <= mB) {
+      const t = mB === mA ? 0 : (value - mA) / (mB - mA);
+      const totalMonths = Math.round(monthA + t * (monthB - monthA));
+      const years = Math.floor(totalMonths / 12);
+      const months = totalMonths % 12;
+      if (years === 0) return `${months}m`;
+      if (months === 0) return `${years}a`;
+      return `${years}a ${months}m`;
+    }
+  }
+
+  return null;
+}

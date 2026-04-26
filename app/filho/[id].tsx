@@ -559,7 +559,7 @@ export default function FilhoScreen() {
     <SafeAreaView style={{ flex: 1, backgroundColor: "#0f1014" }}>
       {/* Header */}
       <View style={{ flexDirection: "row", alignItems: "center", padding: 16, paddingBottom: 12, gap: 12 }}>
-        <Pressable onPress={() => router.back()}>
+        <Pressable onPress={() => router.replace("/(tabs)/")}>
           <Ionicons name="chevron-back" size={26} color="#10b981" />
         </Pressable>
         {photoUrl ? (

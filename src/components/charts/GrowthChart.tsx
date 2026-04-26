@@ -488,12 +488,7 @@ export function GrowthChart({
               ) : null}
               {selectedData.childP50Age ? (
                 <Text style={{ color: "#72737f", fontSize: 12, marginTop: 4 }}>
-                  P50 aos {selectedData.childP50Age}
-                </Text>
-              ) : null}
-              {selectedData.childP50Delta ? (
-                <Text style={{ color: "#72737f", fontSize: 12 }}>
-                  P50 em {selectedData.childP50Delta}
+                  P50 aos {selectedData.childP50Age}{selectedData.childP50Delta ? ` (${selectedData.childP50Delta})` : ""}
                 </Text>
               ) : null}
             </View>

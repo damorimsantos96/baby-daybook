@@ -423,12 +423,7 @@ export function GrowthChart({
                     )}
                     {hoverInfo.childP50Age && (
                       <div style={{ color: "#72737f", fontSize: 9, marginTop: 1 }}>
-                        P50 aos {hoverInfo.childP50Age}
-                      </div>
-                    )}
-                    {hoverInfo.childP50Delta && (
-                      <div style={{ color: "#72737f", fontSize: 9, marginTop: 1 }}>
-                        P50 em {hoverInfo.childP50Delta}
+                        P50 aos {hoverInfo.childP50Age}{hoverInfo.childP50Delta ? ` (${hoverInfo.childP50Delta})` : ""}
                       </div>
                     )}
                     {hoverInfo.childDate && (

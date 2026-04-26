@@ -415,12 +415,7 @@ export function ComparisonGrowthChart({
                   </Text>
                   {row.p50Age ? (
                     <Text style={{ color: "#72737f", fontSize: 11, marginTop: 4 }}>
-                      P50 aos {row.p50Age}
-                    </Text>
-                  ) : null}
-                  {row.p50Delta ? (
-                    <Text style={{ color: "#72737f", fontSize: 11 }}>
-                      P50 em {row.p50Delta}
+                      P50 aos {row.p50Age}{row.p50Delta ? ` (${row.p50Delta})` : ""}
                     </Text>
                   ) : null}
                 </View>

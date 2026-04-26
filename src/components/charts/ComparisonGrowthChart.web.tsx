@@ -308,10 +308,7 @@ export function ComparisonGrowthChart({
                     {`${row.value.toFixed(metric === "weight" ? 2 : 1)} ${unit}`}
                   </div>
                   {row.p50Age ? (
-                    <div style={{ color: "#72737f", fontSize: 9 }}>P50 aos {row.p50Age}</div>
-                  ) : null}
-                  {row.p50Delta ? (
-                    <div style={{ color: "#72737f", fontSize: 9 }}>P50 em {row.p50Delta}</div>
+                    <div style={{ color: "#72737f", fontSize: 9 }}>P50 aos {row.p50Age}{row.p50Delta ? ` (${row.p50Delta})` : ""}</div>
                   ) : null}
                   <div style={{ color: "#72737f", fontSize: 9 }}>
                     {format(parseISO(row.date), "dd/MM/yyyy")}

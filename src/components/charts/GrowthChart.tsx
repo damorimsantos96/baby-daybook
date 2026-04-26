@@ -18,12 +18,13 @@ import type {
   Sex,
 } from "@/types";
 
-const PAD_LEFT = 48;
+const PAD_LEFT = 56;
 const PAD_RIGHT = 16;
 const PAD_TOP = 12;
 const PAD_BOTTOM = 32;
 const CHART_H = 440;
 const MONTH_WIDTH = 5;
+const PLOT_INSET_X = 12;
 const TITLE_H = 26;
 
 const COLORS = {
@@ -43,8 +44,8 @@ function range(values: number[]): [number, number] {
 }
 
 function toX(month: number, minMonth: number, maxMonth: number, width: number): number {
-  if (maxMonth === minMonth) return PAD_LEFT + width / 2;
-  return PAD_LEFT + ((month - minMonth) / (maxMonth - minMonth)) * width;
+  if (maxMonth === minMonth) return PAD_LEFT + PLOT_INSET_X + width / 2;
+  return PAD_LEFT + PLOT_INSET_X + ((month - minMonth) / (maxMonth - minMonth)) * width;
 }
 
 function toY(value: number, minValue: number, maxValue: number): number {
@@ -182,7 +183,8 @@ export function GrowthChart({
     [curve, minMonth, maxMonth]
   );
 
-  const chartWidth = canvasWidth - PAD_LEFT - PAD_RIGHT;
+  const innerChartWidth = canvasWidth - PAD_LEFT - PAD_RIGHT;
+  const chartWidth = Math.max(innerChartWidth - PLOT_INSET_X * 2, 1);
 
   const { minValue, maxValue } = useMemo(() => {
     const allValues = [
@@ -245,12 +247,14 @@ export function GrowthChart({
   }, [chartWidth, dataPoints, maxMonth, maxValue, minMonth, minValue]);
 
   function handleTouch(locationX: number) {
-    if (locationX < PAD_LEFT || locationX > PAD_LEFT + chartWidth) {
+    const plotLeft = PAD_LEFT + PLOT_INSET_X;
+    const plotRight = plotLeft + chartWidth;
+    if (locationX < plotLeft || locationX > plotRight) {
       setTooltipData(null);
       return;
     }
 
-    const month = minMonth + ((locationX - PAD_LEFT) / chartWidth) * (maxMonth - minMonth);
+    const month = minMonth + ((locationX - plotLeft) / chartWidth) * (maxMonth - minMonth);
     const clampedMonth = Math.max(minMonth, Math.min(maxMonth, month));
     const nearestPoint =
       dataPoints.length > 0
@@ -434,7 +438,7 @@ export function GrowthChart({
 
       <View style={{ height: 18, marginLeft: 0, position: "relative" }}>
         {xTicks.map((month) => {
-          const x = PAD_LEFT + ((month - minMonth) / (maxMonth - minMonth)) * chartWidth;
+          const x = toX(month, minMonth, maxMonth, chartWidth);
           return (
             <Text
               key={month}
@@ -464,10 +468,10 @@ export function GrowthChart({
                 color: COLORS.label,
                 fontSize: 9,
                 position: "absolute",
-                right: 2,
+                right: 6,
                 textAlign: "right",
                 top: y,
-                width: PAD_LEFT - 4,
+                width: PAD_LEFT - 10,
               }}
             >
               {value.toFixed(metric === "weight" ? 1 : 0)}

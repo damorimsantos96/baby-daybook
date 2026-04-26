@@ -7,12 +7,13 @@ import {
   getComparisonGuideValues,
 } from "@/components/charts/comparisonChartShared";
 
-const PAD_LEFT = 48;
+const PAD_LEFT = 56;
 const PAD_RIGHT = 16;
 const PAD_TOP = 12;
 const PAD_BOTTOM = 32;
 const CHART_H = 440;
 const MONTH_WIDTH = 5;
+const PLOT_INSET_X = 12;
 
 const GUIDE_COLORS: Record<number, string> = {
   3: "#ef4444",
@@ -54,8 +55,8 @@ interface Props {
 }
 
 function toX(month: number, minMonth: number, maxMonth: number, width: number): number {
-  if (maxMonth === minMonth) return PAD_LEFT + width / 2;
-  return PAD_LEFT + ((month - minMonth) / (maxMonth - minMonth)) * width;
+  if (maxMonth === minMonth) return PAD_LEFT + PLOT_INSET_X + width / 2;
+  return PAD_LEFT + PLOT_INSET_X + ((month - minMonth) / (maxMonth - minMonth)) * width;
 }
 
 function toY(value: number): number {
@@ -109,7 +110,8 @@ export function ComparisonGrowthChart({
     return Math.max((prepared.maxMonth - prepared.minMonth) * MONTH_WIDTH, containerWidth ?? 300);
   }, [containerWidth, prepared]);
 
-  const chartWidth = canvasWidth - PAD_LEFT - PAD_RIGHT;
+  const innerChartWidth = canvasWidth - PAD_LEFT - PAD_RIGHT;
+  const chartWidth = Math.max(innerChartWidth - PLOT_INSET_X * 2, 1);
   const yTicks = [0, 25, 50, 75, 100];
 
   const xTicks = useMemo(() => {
@@ -133,14 +135,16 @@ export function ComparisonGrowthChart({
 
     const rect = event.currentTarget.getBoundingClientRect();
     const svgX = event.clientX - rect.left;
-    if (svgX < PAD_LEFT || svgX > PAD_LEFT + chartWidth) {
+    const plotLeft = PAD_LEFT + PLOT_INSET_X;
+    const plotRight = plotLeft + chartWidth;
+    if (svgX < plotLeft || svgX > plotRight) {
       setHoverInfo(null);
       return;
     }
 
     const month =
       prepared.minMonth +
-      ((svgX - PAD_LEFT) / chartWidth) * (prepared.maxMonth - prepared.minMonth);
+      ((svgX - plotLeft) / chartWidth) * (prepared.maxMonth - prepared.minMonth);
     const clampedMonth = Math.max(prepared.minMonth, Math.min(prepared.maxMonth, month));
 
     const rows = prepared.series
@@ -333,7 +337,7 @@ export function ComparisonGrowthChart({
       </Text>
       {prepared.excludedChildren.length > 0 && (
         <Text style={{ color: "#72737f", fontSize: 10, marginLeft: PAD_LEFT, marginTop: 2 }}>
-          Sem dados nesta referÃªncia: {prepared.excludedChildren.join(", ")}
+          Sem dados nesta referência: {prepared.excludedChildren.join(", ")}
         </Text>
       )}
     </View>

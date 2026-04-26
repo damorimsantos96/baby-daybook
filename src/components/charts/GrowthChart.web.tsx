@@ -17,12 +17,13 @@ import type {
   Sex,
 } from "@/types";
 
-const PAD_LEFT = 48;
+const PAD_LEFT = 56;
 const PAD_RIGHT = 16;
 const PAD_TOP = 12;
 const PAD_BOTTOM = 32;
 const CHART_H = 440;
 const MONTH_WIDTH = 5;
+const PLOT_INSET_X = 12;
 
 const COLORS = {
   p50: "#10b981",
@@ -41,8 +42,8 @@ function range(values: number[]): [number, number] {
 }
 
 function toX(month: number, minMonth: number, maxMonth: number, width: number): number {
-  if (maxMonth === minMonth) return PAD_LEFT + width / 2;
-  return PAD_LEFT + ((month - minMonth) / (maxMonth - minMonth)) * width;
+  if (maxMonth === minMonth) return PAD_LEFT + PLOT_INSET_X + width / 2;
+  return PAD_LEFT + PLOT_INSET_X + ((month - minMonth) / (maxMonth - minMonth)) * width;
 }
 
 function toY(value: number, minValue: number, maxValue: number): number {
@@ -198,7 +199,8 @@ export function GrowthChart({
     [curve, minMonth, maxMonth]
   );
 
-  const chartWidth = canvasWidth - PAD_LEFT - PAD_RIGHT;
+  const innerChartWidth = canvasWidth - PAD_LEFT - PAD_RIGHT;
+  const chartWidth = Math.max(innerChartWidth - PLOT_INSET_X * 2, 1);
 
   const { minValue, maxValue } = useMemo(() => {
     const allValues = [
@@ -250,12 +252,14 @@ export function GrowthChart({
   function handleMouseMove(event: React.MouseEvent<SVGSVGElement>) {
     const rect = event.currentTarget.getBoundingClientRect();
     const svgX = event.clientX - rect.left;
-    if (svgX < PAD_LEFT || svgX > PAD_LEFT + chartWidth) {
+    const plotLeft = PAD_LEFT + PLOT_INSET_X;
+    const plotRight = plotLeft + chartWidth;
+    if (svgX < plotLeft || svgX > plotRight) {
       setHoverInfo(null);
       return;
     }
 
-    const month = minMonth + ((svgX - PAD_LEFT) / chartWidth) * (maxMonth - minMonth);
+    const month = minMonth + ((svgX - plotLeft) / chartWidth) * (maxMonth - minMonth);
     const clampedMonth = Math.max(minMonth, Math.min(maxMonth, month));
     const nearestPoint =
       dataPoints.length > 0

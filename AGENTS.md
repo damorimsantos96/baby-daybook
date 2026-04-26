@@ -142,20 +142,25 @@
 - Prefer surgical edits over broad refactors.
 - Preserve React Query invalidation behavior when touching mutations.
 - When changing schema assumptions, read the corresponding migration first and then align TS types and API code.
+- Start every change from updated `master`, then create the work branch immediately. Do not begin edits on `master`.
+- Use elevated permission from the start for git operations and Expo/EAS deploy commands. Do not wait for sandbox failure or `.git` lock errors.
 
 ## After Every Change — Mandatory Steps
 After implementing any change, always complete all applicable steps before reporting done:
 
-1. **Create a branch** specific to the work before starting any `feat`, `fix`, `docs`, or `security` change.
-2. **Commit** the changed files with a descriptive message on that branch.
-3. **Merge** the finished branch into `master`.
-4. **Push** `master` to `origin/master`.
-5. **Delete** the branch created for that work after the merge is complete.
-6. **Deploy/update** based on what changed:
+1. **Start on `master`** and update/sync it if needed.
+2. **Create a branch immediately from `master`** before any `feat`, `fix`, `docs`, or `security` change. This is mandatory for every task.
+3. **Use elevated permission immediately** for git commands that write to `.git` and for Expo/EAS commands. Do not try non-elevated first.
+4. **Implement directly**. Do not narrate fallback attempts like "patch applied, now trying git flow" or "merge blocked by lock". Execute the working path first.
+5. **Commit** the changed files with a descriptive message on that branch.
+6. **Merge** the finished branch into `master`.
+7. **Push** `master` to `origin/master`.
+8. **Delete** the branch created for that work after the merge is complete.
+9. **Deploy/update** based on what changed:
    - JS or asset change → `eas update` with `EXPO_TOKEN`, `--channel production`, `--environment production`, `--platform android`, `--message`.
    - Native/SDK/permission change → new EAS build; notify Diego to reinstall APK.
-7. Tell Diego in one line what was deployed and what action he needs to take.
-8. If this file or `CLAUDE.md` was edited, commit and push those `.md` changes too.
+10. Tell Diego in one line what was deployed and what action he needs to take.
+11. If this file or `CLAUDE.md` was edited, commit and push those `.md` changes too.
 
 ## Response Style
 - Be as concise as possible. Deliver the same information with the fewest words.

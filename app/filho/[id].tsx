@@ -12,11 +12,16 @@ import {
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { format, parseISO, differenceInMonths, differenceInYears } from "date-fns";
+import { addMonths, differenceInMonths, differenceInYears, format, parseISO } from "date-fns";
 import {
   ageInMonths,
   ageInMonthsPrecise,
+  formatAgeMonths,
+  formatPercentileLabel,
+  getObservedPercentileNumber,
   getP50EquivalentInfo,
+  getProjectedValueAtPercentile,
+  getProjectionRange,
   getValuePercentile,
 } from "@/utils/growthCurves";
 import { Ionicons } from "@expo/vector-icons";
@@ -31,6 +36,9 @@ import { BottomSheetModal } from "@/components/ui/BottomSheetModal";
 import { GrowthChart } from "@/components/charts/GrowthChart";
 import { ComparisonGrowthChart } from "@/components/charts/ComparisonGrowthChart";
 import type { GrowthMetric, GrowthStandard, Measurement, PercentileMode, Sex } from "@/types";
+
+type DetailTab = "tabela" | "graficos" | "projecao";
+type ProjectionMetric = "weight" | "height";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -169,12 +177,191 @@ function MeasurementSummary({
 
 // ─── Tab toggle ───────────────────────────────────────────────────────────────
 
+interface ProjectionRow {
+  dateLabel: string;
+  month: number;
+  value: number;
+}
+
+interface ProjectionSectionData {
+  decimals: number;
+  label: string;
+  lastDate: string;
+  lastMonth: number;
+  lastPercentile: number | null;
+  lastValue: number;
+  rangeEndMonth: number;
+  rows: ProjectionRow[];
+  unit: string;
+}
+
+function getMetricValue(metric: ProjectionMetric, measurement: Measurement): number | null {
+  return metric === "weight" ? measurement.weight_kg : measurement.height_cm;
+}
+
+function buildProjectionSectionData(
+  metric: ProjectionMetric,
+  birthDate: string,
+  sex: Sex,
+  measurements: Measurement[]
+): ProjectionSectionData | null {
+  const range = getProjectionRange(metric);
+  if (!range) return null;
+
+  const latest = [...measurements]
+    .sort((left, right) => right.date.localeCompare(left.date))
+    .find((measurement) => getMetricValue(metric, measurement) != null);
+
+  if (!latest) return null;
+
+  const lastValue = getMetricValue(metric, latest);
+  if (lastValue == null) return null;
+
+  const lastMonth = Math.max(0, Math.round(ageInMonthsPrecise(birthDate, latest.date)));
+  const lastPercentile = getObservedPercentileNumber(metric, sex, lastMonth, lastValue);
+  const firstProjectionMonth = Math.floor(lastMonth / 6) * 6 + 6;
+  const rows: ProjectionRow[] = [];
+
+  if (lastPercentile != null) {
+    for (let month = firstProjectionMonth; month <= range.endMonth; month += 6) {
+      const value = getProjectedValueAtPercentile(metric, sex, month, lastPercentile);
+      if (value == null) continue;
+
+      rows.push({
+        dateLabel: format(addMonths(parseISO(birthDate), month), "MM/yyyy"),
+        month,
+        value,
+      });
+    }
+  }
+
+  return {
+    decimals: metric === "weight" ? 2 : 1,
+    label: metric === "weight" ? "Peso" : "Altura",
+    lastDate: latest.date,
+    lastMonth,
+    lastPercentile,
+    lastValue,
+    rangeEndMonth: range.endMonth,
+    rows,
+    unit: metric === "weight" ? "kg" : "cm",
+  };
+}
+
+function ProjectionSection({ section }: { section: ProjectionSectionData }) {
+  return (
+    <View style={{ backgroundColor: "#1c1d23", borderRadius: 12, marginBottom: 16, overflow: "hidden" }}>
+      <View style={{ padding: 14, paddingBottom: 10 }}>
+        <Text style={{ color: "#ecfdf5", fontSize: 15, fontWeight: "700" }}>{section.label}</Text>
+        <Text style={{ color: "#a0a1aa", fontSize: 12, marginTop: 6 }}>
+          {section.lastValue.toFixed(section.decimals)} {section.unit} ·{" "}
+          {section.lastPercentile != null ? formatPercentileLabel(section.lastPercentile) : "sem percentil"} ·{" "}
+          {formatAgeMonths(section.lastMonth)}
+        </Text>
+        <Text style={{ color: "#72737f", fontSize: 11, marginTop: 3 }}>
+          Ultima medicao em {format(parseISO(section.lastDate), "dd/MM/yyyy")} · projecao semestral ate{" "}
+          {formatAgeMonths(section.rangeEndMonth)}
+        </Text>
+      </View>
+
+      {section.lastPercentile == null ? (
+        <Text style={{ color: "#72737f", fontSize: 12, paddingHorizontal: 14, paddingBottom: 14 }}>
+          Ultima medicao fora da faixa de referencia disponivel para projecao.
+        </Text>
+      ) : section.rows.length === 0 ? (
+        <Text style={{ color: "#72737f", fontSize: 12, paddingHorizontal: 14, paddingBottom: 14 }}>
+          Ultima medicao ja esta no limite da referencia.
+        </Text>
+      ) : (
+        <>
+          <View style={{ borderTopColor: "#2c2d36", borderTopWidth: 1, flexDirection: "row", paddingHorizontal: 14, paddingVertical: 10 }}>
+            <Text style={[colHeader, { flex: 1.2 }]}>IDADE</Text>
+            <Text style={[colHeader, { flex: 1 }]}>DATA</Text>
+            <Text style={[colHeader, { flex: 1 }]}>PERCENTIL</Text>
+            <Text style={[colHeader, { flex: 1, textAlign: "right" }]}>VALOR</Text>
+          </View>
+          {section.rows.map((row) => (
+            <View
+              key={row.month}
+              style={{
+                borderTopColor: "#2c2d36",
+                borderTopWidth: 1,
+                flexDirection: "row",
+                paddingHorizontal: 14,
+                paddingVertical: 10,
+              }}
+            >
+              <Text style={[cell, { flex: 1.2, color: row.month === 120 ? "#ecfdf5" : "#a0a1aa" }]}>
+                {formatAgeMonths(row.month)}
+              </Text>
+              <Text style={[cell, { flex: 1 }]}>{row.dateLabel}</Text>
+              <Text style={[cell, { flex: 1 }]}>
+                {section.lastPercentile != null ? formatPercentileLabel(section.lastPercentile) : "--"}
+              </Text>
+              <Text style={[cell, { flex: 1, textAlign: "right", color: row.month === 120 ? "#ecfdf5" : "#a0a1aa" }]}>
+                {row.value.toFixed(section.decimals)} {section.unit}
+              </Text>
+            </View>
+          ))}
+        </>
+      )}
+    </View>
+  );
+}
+
+function ProjectionTab({
+  birthDate,
+  measurements,
+  sex,
+}: {
+  birthDate: string;
+  measurements: Measurement[];
+  sex: Sex;
+}) {
+  const sections = useMemo(
+    () =>
+      (["weight", "height"] as const)
+        .map((metric) => buildProjectionSectionData(metric, birthDate, sex, measurements))
+        .filter((section): section is ProjectionSectionData => section != null),
+    [birthDate, measurements, sex]
+  );
+
+  return (
+    <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 32 }}>
+      <View
+        style={{
+          backgroundColor: "#1c1d23",
+          borderRadius: 10,
+          marginBottom: 16,
+          padding: 14,
+        }}
+      >
+        <Text style={{ color: "#a0a1aa", fontSize: 12, fontWeight: "700" }}>Projecao por percentil</Text>
+        <Text style={{ color: "#72737f", fontSize: 12, marginTop: 4 }}>
+          Mantem o ultimo percentil observado e estima peso/altura a cada 6 meses ate o fim da base WHO disponivel.
+        </Text>
+      </View>
+
+      {sections.length === 0 ? (
+        <View style={{ alignItems: "center", marginTop: 40 }}>
+          <Ionicons name="analytics-outline" size={48} color="#2c2d36" />
+          <Text style={{ color: "#72737f", marginTop: 12, fontSize: 14 }}>
+            Adicione peso ou altura para ver projecoes
+          </Text>
+        </View>
+      ) : (
+        sections.map((section) => <ProjectionSection key={section.label} section={section} />)
+      )}
+    </ScrollView>
+  );
+}
+
 function TopTabs({
   active,
   onChange,
 }: {
-  active: "tabela" | "graficos";
-  onChange: (t: "tabela" | "graficos") => void;
+  active: DetailTab;
+  onChange: (t: DetailTab) => void;
 }) {
   return (
     <View
@@ -187,26 +374,30 @@ function TopTabs({
         marginBottom: 12,
       }}
     >
-      {(["tabela", "graficos"] as const).map((t) => (
+      {[
+        { key: "tabela" as const, label: "Tabela" },
+        { key: "graficos" as const, label: "Graficos" },
+        { key: "projecao" as const, label: "Projecao" },
+      ].map((t) => (
         <Pressable
-          key={t}
-          onPress={() => onChange(t)}
+          key={t.key}
+          onPress={() => onChange(t.key)}
           style={{
             flex: 1,
             paddingVertical: 8,
             borderRadius: 8,
             alignItems: "center",
-            backgroundColor: active === t ? "#2c2d36" : "transparent",
+            backgroundColor: active === t.key ? "#2c2d36" : "transparent",
           }}
         >
           <Text
             style={{
-              color: active === t ? "#ecfdf5" : "#72737f",
-              fontWeight: active === t ? "700" : "400",
+              color: active === t.key ? "#ecfdf5" : "#72737f",
+              fontWeight: active === t.key ? "700" : "400",
               fontSize: 14,
             }}
           >
-            {t === "tabela" ? "Tabela" : "Gráficos"}
+            {t.label}
           </Text>
         </Pressable>
       ))}
@@ -265,7 +456,7 @@ export default function FilhoScreen() {
   const upsertMeasurement = useUpsertMeasurement(id);
   const deleteMeasurement = useDeleteMeasurement(id);
 
-  const [activeTab, setActiveTab] = useState<"tabela" | "graficos">("tabela");
+  const [activeTab, setActiveTab] = useState<DetailTab>("tabela");
   const [compareAllChildren, setCompareAllChildren] = useState(false);
   const [standard, setStandard] = useState<GrowthStandard>("WHO");
   const [pMode, setPMode] = useState<PercentileMode>(3);
@@ -454,6 +645,8 @@ export default function FilhoScreen() {
             )}
           />
         )
+      ) : activeTab === "projecao" ? (
+        <ProjectionTab birthDate={child.birth_date} measurements={measurements} sex={child.sex} />
       ) : (
         // ─── Charts tab ─────────────────────────────────────────────────────
         <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 32 }}>
@@ -565,7 +758,7 @@ export default function FilhoScreen() {
                     children={compareChartChildren}
                     currentChildId={child.id}
                     metric="height"
-                    label="Altura / Comprimento"
+                    label="Altura"
                     unit="cm"
                     standard={standard}
                     percentileMode={pMode}
@@ -574,7 +767,7 @@ export default function FilhoScreen() {
                 ) : (
                   <GrowthChart
                     metric="height"
-                    label="Altura / Comprimento"
+                    label="Altura"
                     unit="cm"
                     birthDate={child.birth_date}
                     sex={child.sex}

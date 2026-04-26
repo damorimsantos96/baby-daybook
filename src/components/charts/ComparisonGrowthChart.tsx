@@ -33,6 +33,7 @@ interface TooltipRow {
   color: string;
   date: string;
   name: string;
+  p50AgeEquiv: string | null;
   percentile: number;
   value: number;
 }
@@ -159,6 +160,7 @@ export function ComparisonGrowthChart({
           color: series.color,
           date: nearestPoint.date,
           name: series.name,
+          p50AgeEquiv: nearestPoint.p50AgeEquiv,
           percentile: nearestPoint.percentile,
           value: nearestPoint.value,
         };
@@ -291,6 +293,9 @@ export function ComparisonGrowthChart({
                   <Text style={{ color: "#ffffff", fontSize: 11 }}>
                     P{Math.round(row.percentile)} · {row.value.toFixed(metric === "weight" ? 2 : 1)} {unit}
                   </Text>
+                  {row.p50AgeEquiv ? (
+                    <Text style={{ color: "#72737f", fontSize: 9 }}>P50 aos {row.p50AgeEquiv}</Text>
+                  ) : null}
                   <Text style={{ color: "#72737f", fontSize: 9 }}>
                     {format(parseISO(row.date), "dd/MM/yyyy")}
                   </Text>

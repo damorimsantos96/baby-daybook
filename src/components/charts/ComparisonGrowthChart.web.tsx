@@ -31,6 +31,7 @@ interface HoverRow {
   color: string;
   date: string;
   name: string;
+  p50AgeEquiv: string | null;
   percentile: number;
   value: number;
 }
@@ -159,6 +160,7 @@ export function ComparisonGrowthChart({
           color: series.color,
           date: nearestPoint.date,
           name: series.name,
+          p50AgeEquiv: nearestPoint.p50AgeEquiv,
           percentile: nearestPoint.percentile,
           value: nearestPoint.value,
         };
@@ -271,7 +273,7 @@ export function ComparisonGrowthChart({
             x={tooltipX}
             y={PAD_TOP + 4}
             width={184}
-            height={60 + hoverInfo.rows.length * 48}
+            height={60 + hoverInfo.rows.length * 58}
           >
             {/* @ts-ignore */}
             <div
@@ -296,6 +298,9 @@ export function ComparisonGrowthChart({
                   <div style={{ color: "#ffffff" }}>
                     {`P${Math.round(row.percentile)} · ${row.value.toFixed(metric === "weight" ? 2 : 1)} ${unit}`}
                   </div>
+                  {row.p50AgeEquiv ? (
+                    <div style={{ color: "#72737f", fontSize: 9 }}>P50 aos {row.p50AgeEquiv}</div>
+                  ) : null}
                   <div style={{ color: "#72737f", fontSize: 9 }}>
                     {format(parseISO(row.date), "dd/MM/yyyy")}
                   </div>

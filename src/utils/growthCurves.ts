@@ -208,11 +208,27 @@ export function formatPercentileLabel(percentile: number): string {
   return `P${Math.round(percentile)}`;
 }
 
-export function getP50EquivalentAge(
+function formatAgeMonths(totalMonths: number): string {
+  const safeMonths = Math.max(0, totalMonths);
+  const years = Math.floor(safeMonths / 12);
+  const months = safeMonths % 12;
+
+  if (years === 0) return `${months}m`;
+  if (months === 0) return `${years}a`;
+  return `${years}a ${months}m`;
+}
+
+function formatSignedAgeMonths(monthDelta: number): string {
+  if (monthDelta === 0) return "0m";
+  const sign = monthDelta > 0 ? "+" : "-";
+  return `${sign}${formatAgeMonths(Math.abs(monthDelta))}`;
+}
+
+function getP50EquivalentAgeMonths(
   metric: GrowthMetric,
   sex: Sex,
   value: number
-): string | null {
+): number | null {
   const whoRows = getTable(metric, sex, "WHO");
   const who2007Rows = metric !== "head" ? getTable(metric, sex, "WHO2007") : [];
   const table: readonly LmsRow[] = [...whoRows, ...who2007Rows];
@@ -227,14 +243,33 @@ export function getP50EquivalentAge(
 
     if (mA <= value && value <= mB) {
       const t = mB === mA ? 0 : (value - mA) / (mB - mA);
-      const totalMonths = Math.round(monthA + t * (monthB - monthA));
-      const years = Math.floor(totalMonths / 12);
-      const months = totalMonths % 12;
-      if (years === 0) return `${months}m`;
-      if (months === 0) return `${years}a`;
-      return `${years}a ${months}m`;
+      return Math.round(monthA + t * (monthB - monthA));
     }
   }
 
   return null;
+}
+
+export function getP50EquivalentAge(
+  metric: GrowthMetric,
+  sex: Sex,
+  value: number
+): string | null {
+  const equivalentAgeMonths = getP50EquivalentAgeMonths(metric, sex, value);
+  return equivalentAgeMonths == null ? null : formatAgeMonths(equivalentAgeMonths);
+}
+
+export function getP50EquivalentInfo(
+  metric: GrowthMetric,
+  sex: Sex,
+  actualMonth: number,
+  value: number
+): { ageLabel: string; deltaLabel: string } | null {
+  const equivalentAgeMonths = getP50EquivalentAgeMonths(metric, sex, value);
+  if (equivalentAgeMonths == null) return null;
+
+  return {
+    ageLabel: formatAgeMonths(equivalentAgeMonths),
+    deltaLabel: formatSignedAgeMonths(Math.round(equivalentAgeMonths - actualMonth)),
+  };
 }

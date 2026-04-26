@@ -31,8 +31,8 @@ interface HoverRow {
   color: string;
   date: string;
   name: string;
-  p50AgeEquiv: string | null;
-  percentile: number;
+  p50Age: string | null;
+  p50Delta: string | null;
   value: number;
 }
 
@@ -160,8 +160,8 @@ export function ComparisonGrowthChart({
           color: series.color,
           date: nearestPoint.date,
           name: series.name,
-          p50AgeEquiv: nearestPoint.p50AgeEquiv,
-          percentile: nearestPoint.percentile,
+          p50Age: nearestPoint.p50Age,
+          p50Delta: nearestPoint.p50Delta,
           value: nearestPoint.value,
         };
       })
@@ -180,7 +180,7 @@ export function ComparisonGrowthChart({
         </Text>
         <View style={{ backgroundColor: "#1c1d23", borderRadius: 10, padding: 14 }}>
           <Text style={{ color: "#72737f", fontSize: 12 }}>
-            Sem dados compatÃ­veis entre filhos nesta referÃªncia.
+            Sem dados compatíveis entre filhos nesta referência.
           </Text>
         </View>
       </View>
@@ -189,7 +189,7 @@ export function ComparisonGrowthChart({
 
   const tooltipX = hoverInfo
     ? hoverInfo.svgX > canvasWidth / 2
-      ? hoverInfo.svgX - 196
+      ? hoverInfo.svgX - 220
       : hoverInfo.svgX + 12
     : 0;
 
@@ -272,8 +272,8 @@ export function ComparisonGrowthChart({
           <foreignObject
             x={tooltipX}
             y={PAD_TOP + 4}
-            width={184}
-            height={60 + hoverInfo.rows.length * 58}
+            width={208}
+            height={60 + hoverInfo.rows.length * 72}
           >
             {/* @ts-ignore */}
             <div
@@ -296,10 +296,13 @@ export function ComparisonGrowthChart({
                 <div key={`${row.name}-${row.date}`} style={{ marginBottom: 6 }}>
                   <div style={{ color: row.color, fontWeight: 700 }}>{row.name}</div>
                   <div style={{ color: "#ffffff" }}>
-                    {`P${Math.round(row.percentile)} · ${row.value.toFixed(metric === "weight" ? 2 : 1)} ${unit}`}
+                    {`${row.value.toFixed(metric === "weight" ? 2 : 1)} ${unit}`}
                   </div>
-                  {row.p50AgeEquiv ? (
-                    <div style={{ color: "#72737f", fontSize: 9 }}>P50 aos {row.p50AgeEquiv}</div>
+                  {row.p50Age ? (
+                    <div style={{ color: "#72737f", fontSize: 9 }}>P50 aos {row.p50Age}</div>
+                  ) : null}
+                  {row.p50Delta ? (
+                    <div style={{ color: "#72737f", fontSize: 9 }}>P50 em {row.p50Delta}</div>
                   ) : null}
                   <div style={{ color: "#72737f", fontSize: 9 }}>
                     {format(parseISO(row.date), "dd/MM/yyyy")}
@@ -326,7 +329,7 @@ export function ComparisonGrowthChart({
       </View>
 
       <Text style={{ color: "#72737f", fontSize: 10, marginLeft: PAD_LEFT, marginTop: 2 }}>
-        {prepared.referenceLabel} · faixa comum atÃ© {prepared.overlapEndMonth.toFixed(0)}m
+        {prepared.referenceLabel} · faixa comum até {prepared.overlapEndMonth.toFixed(0)}m
       </Text>
       {prepared.excludedChildren.length > 0 && (
         <Text style={{ color: "#72737f", fontSize: 10, marginLeft: PAD_LEFT, marginTop: 2 }}>

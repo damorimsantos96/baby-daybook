@@ -1,7 +1,7 @@
 import { format } from "date-fns";
 import {
   ageInMonthsPrecise,
-  getP50EquivalentAge,
+  getP50EquivalentInfo,
   getReferenceRange,
   getValuePercentileNumber,
 } from "@/utils/growthCurves";
@@ -15,7 +15,8 @@ export interface ComparisonChartChildInput {
 export interface ComparisonChartPoint {
   date: string;
   month: number;
-  p50AgeEquiv: string | null;
+  p50Age: string | null;
+  p50Delta: string | null;
   percentile: number;
   value: number;
 }
@@ -94,11 +95,13 @@ export function buildComparisonChartData({
           value
         );
         if (percentile == null) return null;
+        const p50Info = getP50EquivalentInfo(metric, child.sex, month, value);
 
         return {
           date: measurement.date,
           month,
-          p50AgeEquiv: getP50EquivalentAge(metric, child.sex, value),
+          p50Age: p50Info?.ageLabel ?? null,
+          p50Delta: p50Info?.deltaLabel ?? null,
           percentile,
           value,
         };
@@ -140,7 +143,8 @@ export function buildComparisonChartData({
               {
                 date: lastVisiblePoint.date,
                 month: overlapEndMonth,
-                p50AgeEquiv: lastVisiblePoint.p50AgeEquiv,
+                p50Age: lastVisiblePoint.p50Age,
+                p50Delta: lastVisiblePoint.p50Delta,
                 percentile:
                   lastVisiblePoint.percentile +
                   ((trailingPoint.percentile - lastVisiblePoint.percentile) *

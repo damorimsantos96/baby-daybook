@@ -3,11 +3,10 @@ import { Text, View } from "react-native";
 import { format, parseISO } from "date-fns";
 import {
   ageInMonthsPrecise,
-  getP50EquivalentAge,
+  getP50EquivalentInfo,
   getPercentileCurve,
   getReferenceCaption,
   getReferenceRange,
-  getValuePercentile,
 } from "@/utils/growthCurves";
 import type {
   GrowthMetric,
@@ -96,8 +95,8 @@ function buildPath(
 
 interface HoverInfo {
   childDate: string | null;
-  childP50AgeEquiv: string | null;
-  childPercentile: string | null;
+  childP50Age: string | null;
+  childP50Delta: string | null;
   childValue: number | null;
   month: number;
   p15: number | null;
@@ -268,15 +267,13 @@ export function GrowthChart({
         : null;
     const matchedPoint =
       nearestPoint && Math.abs(nearestPoint.month - clampedMonth) <= 4 ? nearestPoint : null;
+    const childP50Info =
+      matchedPoint ? getP50EquivalentInfo(metric, sex, matchedPoint.month, matchedPoint.value) : null;
 
     setHoverInfo({
       childDate: matchedPoint ? matchedPoint.date : null,
-      childP50AgeEquiv: matchedPoint
-        ? getP50EquivalentAge(metric, sex, matchedPoint.value)
-        : null,
-      childPercentile: matchedPoint
-        ? getValuePercentile(metric, sex, standard, matchedPoint.month, matchedPoint.value)
-        : null,
+      childP50Age: childP50Info?.ageLabel ?? null,
+      childP50Delta: childP50Info?.deltaLabel ?? null,
       childValue: matchedPoint ? matchedPoint.value : null,
       month: clampedMonth,
       p15: interpolate(clippedCurve, clampedMonth, (point) => point.p15),
@@ -290,7 +287,7 @@ export function GrowthChart({
 
   const tooltipX = hoverInfo
     ? hoverInfo.svgX > canvasWidth / 2
-      ? hoverInfo.svgX - 168
+      ? hoverInfo.svgX - 176
       : hoverInfo.svgX + 12
     : 0;
 
@@ -381,12 +378,13 @@ export function GrowthChart({
           const tooltipHeight =
             70 +
             (hoverInfo.childValue != null ? 24 : 0) +
-            (hoverInfo.childP50AgeEquiv != null ? 14 : 0) +
+            (hoverInfo.childP50Age != null ? 14 : 0) +
+            (hoverInfo.childP50Delta != null ? 14 : 0) +
             (hoverInfo.childDate ? 14 : 0) +
             (percentileMode === 5 ? 36 : 0);
           return (
             // @ts-ignore
-            <foreignObject x={tooltipX} y={PAD_TOP + 4} width={160} height={tooltipHeight}>
+            <foreignObject x={tooltipX} y={PAD_TOP + 4} width={168} height={tooltipHeight}>
               {/* @ts-ignore */}
               <div
                 style={{
@@ -409,12 +407,14 @@ export function GrowthChart({
                     <span style={{ color: "#ffffff", fontWeight: 600 }}>
                       {hoverInfo.childValue.toFixed(decimals)} {unit}
                     </span>
-                    {hoverInfo.childPercentile && (
-                      <span style={{ color: "#10b981", marginLeft: 6 }}>{hoverInfo.childPercentile}</span>
-                    )}
-                    {hoverInfo.childP50AgeEquiv && (
+                    {hoverInfo.childP50Age && (
                       <div style={{ color: "#72737f", fontSize: 9, marginTop: 1 }}>
-                        P50 aos {hoverInfo.childP50AgeEquiv}
+                        P50 aos {hoverInfo.childP50Age}
+                      </div>
+                    )}
+                    {hoverInfo.childP50Delta && (
+                      <div style={{ color: "#72737f", fontSize: 9, marginTop: 1 }}>
+                        P50 em {hoverInfo.childP50Delta}
                       </div>
                     )}
                     {hoverInfo.childDate && (

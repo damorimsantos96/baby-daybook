@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from "react";
-import { ScrollView, Text, View } from "react-native";
+import React, { useMemo, useRef, useState } from "react";
+import { Pressable, ScrollView, Text, View } from "react-native";
 import { Canvas, Circle, DashPathEffect, Line, Path, Skia, vec } from "@shopify/react-native-skia";
 import { format, parseISO } from "date-fns";
 import {
@@ -27,6 +27,8 @@ const CHART_H = 440;
 const MONTH_WIDTH = 5;
 const PLOT_INSET_X = 12;
 const TITLE_H = 26;
+const TAP_TOLERANCE_PX = 28;
+const TAP_MOVE_THRESHOLD = 8;
 
 const COLORS = {
   p50: "#10b981",
@@ -79,12 +81,12 @@ function interpolate(
   return null;
 }
 
-interface TooltipData {
-  childDate: string | null;
+interface SelectedData {
+  childDate: string;
   childP50Age: string | null;
   childP50Delta: string | null;
   childPercentile: string | null;
-  childValue: number | null;
+  childValue: number;
   month: number;
   p15: number | null;
   p3: number | null;
@@ -117,7 +119,8 @@ export function GrowthChart({
   percentileMode,
   containerWidth,
 }: Props) {
-  const [tooltipData, setTooltipData] = useState<TooltipData | null>(null);
+  const [selectedData, setSelectedData] = useState<SelectedData | null>(null);
+  const touchStartX = useRef(0);
 
   const decimals = metric === "weight" ? 2 : 1;
   const referenceRange = useMemo(() => getReferenceRange(metric, standard), [metric, standard]);
@@ -248,53 +251,57 @@ export function GrowthChart({
     return path;
   }, [chartWidth, dataPoints, maxMonth, maxValue, minMonth, minValue]);
 
-  function handleTouch(locationX: number) {
-    const plotLeft = PAD_LEFT + PLOT_INSET_X;
-    const plotRight = plotLeft + chartWidth;
-    if (locationX < plotLeft || locationX > plotRight) {
-      setTooltipData(null);
+  function handleTap(locationX: number) {
+    const nonGhostPoints = dataPoints.filter((p) => !p.ghost);
+    if (!nonGhostPoints.length) {
+      setSelectedData(null);
       return;
     }
 
-    const month = minMonth + ((locationX - plotLeft) / chartWidth) * (maxMonth - minMonth);
-    const clampedMonth = Math.max(minMonth, Math.min(maxMonth, month));
-    const nearestPoint =
-      dataPoints.length > 0
-        ? dataPoints.reduce((left, right) =>
-            Math.abs(left.month - clampedMonth) < Math.abs(right.month - clampedMonth)
-              ? left
-              : right
-          )
-        : null;
-    const matchedPoint =
-      nearestPoint && Math.abs(nearestPoint.month - clampedMonth) <= 4 ? nearestPoint : null;
-    const childP50Info =
-      matchedPoint ? getP50EquivalentInfo(metric, sex, matchedPoint.month, matchedPoint.value) : null;
+    let nearest = nonGhostPoints[0];
+    let minDist = Infinity;
+    for (const point of nonGhostPoints) {
+      const dist = Math.abs(toX(point.month, minMonth, maxMonth, chartWidth) - locationX);
+      if (dist < minDist) {
+        minDist = dist;
+        nearest = point;
+      }
+    }
 
-    setTooltipData({
-      childDate: matchedPoint ? matchedPoint.date : null,
+    if (minDist > TAP_TOLERANCE_PX) {
+      setSelectedData(null);
+      return;
+    }
+
+    const dotX = toX(nearest.month, minMonth, maxMonth, chartWidth);
+
+    if (selectedData && Math.abs(selectedData.svgX - dotX) < 5) {
+      setSelectedData(null);
+      return;
+    }
+
+    const childP50Info = getP50EquivalentInfo(metric, sex, nearest.month, nearest.value);
+    setSelectedData({
+      childDate: nearest.date,
       childP50Age: childP50Info?.ageLabel ?? null,
       childP50Delta: childP50Info?.deltaLabel ?? null,
-      childPercentile: matchedPoint
-        ? getValuePercentile(metric, sex, standard, matchedPoint.month, matchedPoint.value)
-        : null,
-      childValue: matchedPoint ? matchedPoint.value : null,
-      month: clampedMonth,
-      p15: interpolate(clippedCurve, clampedMonth, (point) => point.p15),
-      p3: interpolate(clippedCurve, clampedMonth, (point) => point.p3),
-      p50: interpolate(clippedCurve, clampedMonth, (point) => point.p50),
-      p85: interpolate(clippedCurve, clampedMonth, (point) => point.p85),
-      p97: interpolate(clippedCurve, clampedMonth, (point) => point.p97),
-      svgX: locationX,
+      childPercentile: getValuePercentile(metric, sex, standard, nearest.month, nearest.value),
+      childValue: nearest.value,
+      month: nearest.month,
+      p15: interpolate(clippedCurve, nearest.month, (p) => p.p15),
+      p3: interpolate(clippedCurve, nearest.month, (p) => p.p3),
+      p50: interpolate(clippedCurve, nearest.month, (p) => p.p50),
+      p85: interpolate(clippedCurve, nearest.month, (p) => p.p85),
+      p97: interpolate(clippedCurve, nearest.month, (p) => p.p97),
+      svgX: dotX,
     });
   }
 
   if (!curve.length || !referenceRange) return null;
 
-  const tooltipLeft =
-    tooltipData && tooltipData.svgX > canvasWidth / 2
-      ? tooltipData.svgX - 138
-      : (tooltipData?.svgX ?? 0) + 10;
+  const selectedPoint = selectedData
+    ? dataPoints.find((p) => !p.ghost && p.date === selectedData.childDate) ?? null
+    : null;
 
   return (
     <View style={{ marginBottom: 28 }}>
@@ -356,93 +363,44 @@ export function GrowthChart({
                 />
               ))}
 
-            {tooltipData && (
+            {selectedData && (
               <Line
-                p1={vec(tooltipData.svgX, PAD_TOP)}
-                p2={vec(tooltipData.svgX, CHART_H - PAD_BOTTOM)}
-                color="rgba(255,255,255,0.25)"
+                p1={vec(selectedData.svgX, PAD_TOP)}
+                p2={vec(selectedData.svgX, CHART_H - PAD_BOTTOM)}
+                color="rgba(255,255,255,0.3)"
                 strokeWidth={1}
               />
+            )}
+
+            {selectedPoint && (
+              <>
+                <Circle
+                  cx={toX(selectedPoint.month, minMonth, maxMonth, chartWidth)}
+                  cy={toY(selectedPoint.value, minValue, maxValue)}
+                  r={11}
+                  color="rgba(255,255,255,0.18)"
+                />
+                <Circle
+                  cx={toX(selectedPoint.month, minMonth, maxMonth, chartWidth)}
+                  cy={toY(selectedPoint.value, minValue, maxValue)}
+                  r={5}
+                  color={COLORS.dot}
+                />
+              </>
             )}
           </Canvas>
 
           <View
             style={{ height: CHART_H, left: 0, position: "absolute", top: 0, width: canvasWidth }}
-            onTouchStart={(event) => handleTouch(event.nativeEvent.locationX)}
-            onTouchMove={(event) => handleTouch(event.nativeEvent.locationX)}
-            onTouchEnd={() => setTooltipData(null)}
+            onTouchStart={(e) => {
+              touchStartX.current = e.nativeEvent.locationX;
+            }}
+            onTouchEnd={(e) => {
+              if (Math.abs(e.nativeEvent.locationX - touchStartX.current) <= TAP_MOVE_THRESHOLD) {
+                handleTap(e.nativeEvent.locationX);
+              }
+            }}
           />
-
-          {tooltipData && (
-            <View
-              style={{
-                backgroundColor: "#1c1d23",
-                borderColor: "#2c2d36",
-                borderRadius: 8,
-                borderWidth: 1,
-                left: tooltipLeft,
-                minWidth: 155,
-                padding: 10,
-                position: "absolute",
-                top: PAD_TOP + 8,
-                zIndex: 10,
-              }}
-            >
-              <Text style={{ color: "#72737f", fontSize: 10, marginBottom: 4 }}>
-                {tooltipData.month.toFixed(0)} meses
-              </Text>
-              {tooltipData.childValue != null && (
-                <>
-                  <Text style={{ color: "#ffffff", fontSize: 12, fontWeight: "600" }}>
-                    {tooltipData.childValue.toFixed(decimals)} {unit}
-                  </Text>
-                  {tooltipData.childPercentile ? (
-                    <Text style={{ color: "#10b981", fontSize: 11, marginTop: 1 }}>
-                      {tooltipData.childPercentile}
-                    </Text>
-                  ) : null}
-                  {tooltipData.childP50Age ? (
-                    <Text style={{ color: "#72737f", fontSize: 9, marginTop: 1 }}>
-                      P50 aos {tooltipData.childP50Age}
-                    </Text>
-                  ) : null}
-                  {tooltipData.childP50Delta ? (
-                    <Text style={{ color: "#72737f", fontSize: 9, marginTop: 1 }}>
-                      P50 em {tooltipData.childP50Delta}
-                    </Text>
-                  ) : null}
-                  {tooltipData.childDate ? (
-                    <Text style={{ color: "#72737f", fontSize: 9, marginBottom: 4, marginTop: 1 }}>
-                      {format(parseISO(tooltipData.childDate), "dd/MM/yyyy")}
-                    </Text>
-                  ) : (
-                    <View style={{ marginBottom: 4 }} />
-                  )}
-                </>
-              )}
-              <Text style={{ color: COLORS.p50, fontSize: 11, marginBottom: 2 }}>
-                P50: {tooltipData.p50?.toFixed(decimals) ?? "--"}
-              </Text>
-              {percentileMode === 5 && (
-                <>
-                  <Text style={{ color: COLORS.p15, fontSize: 11, marginBottom: 2 }}>
-                    P15: {tooltipData.p15?.toFixed(decimals) ?? "--"}
-                  </Text>
-                  <Text style={{ color: COLORS.p85, fontSize: 11, marginBottom: 2 }}>
-                    P85: {tooltipData.p85?.toFixed(decimals) ?? "--"}
-                  </Text>
-                </>
-              )}
-              <View style={{ flexDirection: "row", gap: 8, justifyContent: "space-between" }}>
-                <Text style={{ color: COLORS.p3, fontSize: 11 }}>
-                  P3: {tooltipData.p3?.toFixed(decimals) ?? "--"}
-                </Text>
-                <Text style={{ color: COLORS.p97, fontSize: 11 }}>
-                  P97: {tooltipData.p97?.toFixed(decimals) ?? "--"}
-                </Text>
-              </View>
-            </View>
-          )}
         </View>
       </ScrollView>
 
@@ -490,7 +448,90 @@ export function GrowthChart({
         })}
       </View>
 
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12, marginLeft: PAD_LEFT, marginTop: 4 }}>
+      {selectedData && (
+        <View
+          style={{
+            backgroundColor: "#1c1d23",
+            borderColor: "#2c2d36",
+            borderRadius: 8,
+            borderWidth: 1,
+            marginHorizontal: 12,
+            marginTop: 8,
+            padding: 12,
+          }}
+        >
+          <View
+            style={{
+              alignItems: "center",
+              flexDirection: "row",
+              justifyContent: "space-between",
+              marginBottom: 8,
+            }}
+          >
+            <Text style={{ color: "#72737f", fontSize: 11 }}>
+              {Math.round(selectedData.month)} meses · {format(parseISO(selectedData.childDate), "dd/MM/yyyy")}
+            </Text>
+            <Pressable onPress={() => setSelectedData(null)} hitSlop={12}>
+              <Text style={{ color: "#72737f", fontSize: 18, lineHeight: 18 }}>✕</Text>
+            </Pressable>
+          </View>
+
+          <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+            <View>
+              <Text style={{ color: "#ffffff", fontSize: 20, fontWeight: "700" }}>
+                {selectedData.childValue.toFixed(decimals)} {unit}
+              </Text>
+              {selectedData.childPercentile ? (
+                <Text style={{ color: "#10b981", fontSize: 13, marginTop: 2 }}>
+                  {selectedData.childPercentile}
+                </Text>
+              ) : null}
+              {selectedData.childP50Age ? (
+                <Text style={{ color: "#72737f", fontSize: 12, marginTop: 4 }}>
+                  P50 aos {selectedData.childP50Age}
+                </Text>
+              ) : null}
+              {selectedData.childP50Delta ? (
+                <Text style={{ color: "#72737f", fontSize: 12 }}>
+                  P50 em {selectedData.childP50Delta}
+                </Text>
+              ) : null}
+            </View>
+
+            <View style={{ alignItems: "flex-end", justifyContent: "flex-start" }}>
+              <Text style={{ color: COLORS.p50, fontSize: 12, marginBottom: 3 }}>
+                P50: {selectedData.p50?.toFixed(decimals) ?? "--"}
+              </Text>
+              {percentileMode === 5 && (
+                <>
+                  <Text style={{ color: COLORS.p15, fontSize: 12, marginBottom: 3 }}>
+                    P15: {selectedData.p15?.toFixed(decimals) ?? "--"}
+                  </Text>
+                  <Text style={{ color: COLORS.p85, fontSize: 12, marginBottom: 3 }}>
+                    P85: {selectedData.p85?.toFixed(decimals) ?? "--"}
+                  </Text>
+                </>
+              )}
+              <Text style={{ color: COLORS.p3, fontSize: 12, marginBottom: 3 }}>
+                P3: {selectedData.p3?.toFixed(decimals) ?? "--"}
+              </Text>
+              <Text style={{ color: COLORS.p97, fontSize: 12 }}>
+                P97: {selectedData.p97?.toFixed(decimals) ?? "--"}
+              </Text>
+            </View>
+          </View>
+        </View>
+      )}
+
+      <View
+        style={{
+          flexDirection: "row",
+          flexWrap: "wrap",
+          gap: 12,
+          marginLeft: PAD_LEFT,
+          marginTop: selectedData ? 8 : 4,
+        }}
+      >
         <LegendItem color={COLORS.p50} label="P50" dashed={false} />
         {percentileMode === 5 && <LegendItem color={COLORS.p15} label="P15/P85" dashed />}
         <LegendItem color={COLORS.p3} label="P3/P97" dashed />

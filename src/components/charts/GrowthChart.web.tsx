@@ -3,6 +3,7 @@ import { Text, View } from "react-native";
 import { format, parseISO } from "date-fns";
 import {
   ageInMonthsPrecise,
+  getP50EquivalentAge,
   getPercentileCurve,
   getReferenceCaption,
   getReferenceRange,
@@ -95,6 +96,7 @@ function buildPath(
 
 interface HoverInfo {
   childDate: string | null;
+  childP50AgeEquiv: string | null;
   childPercentile: string | null;
   childValue: number | null;
   month: number;
@@ -269,6 +271,9 @@ export function GrowthChart({
 
     setHoverInfo({
       childDate: matchedPoint ? matchedPoint.date : null,
+      childP50AgeEquiv: matchedPoint
+        ? getP50EquivalentAge(metric, sex, matchedPoint.value)
+        : null,
       childPercentile: matchedPoint
         ? getValuePercentile(metric, sex, standard, matchedPoint.month, matchedPoint.value)
         : null,
@@ -374,7 +379,11 @@ export function GrowthChart({
 
         {hoverInfo && (() => {
           const tooltipHeight =
-            70 + (hoverInfo.childValue != null ? 36 : 0) + (percentileMode === 5 ? 36 : 0);
+            70 +
+            (hoverInfo.childValue != null ? 24 : 0) +
+            (hoverInfo.childP50AgeEquiv != null ? 14 : 0) +
+            (hoverInfo.childDate ? 14 : 0) +
+            (percentileMode === 5 ? 36 : 0);
           return (
             // @ts-ignore
             <foreignObject x={tooltipX} y={PAD_TOP + 4} width={160} height={tooltipHeight}>
@@ -403,8 +412,13 @@ export function GrowthChart({
                     {hoverInfo.childPercentile && (
                       <span style={{ color: "#10b981", marginLeft: 6 }}>{hoverInfo.childPercentile}</span>
                     )}
+                    {hoverInfo.childP50AgeEquiv && (
+                      <div style={{ color: "#72737f", fontSize: 9, marginTop: 1 }}>
+                        P50 aos {hoverInfo.childP50AgeEquiv}
+                      </div>
+                    )}
                     {hoverInfo.childDate && (
-                      <div style={{ color: "#72737f", fontSize: 9 }}>
+                      <div style={{ color: "#72737f", fontSize: 9, marginTop: 1 }}>
                         {format(parseISO(hoverInfo.childDate), "dd/MM/yy")}
                       </div>
                     )}

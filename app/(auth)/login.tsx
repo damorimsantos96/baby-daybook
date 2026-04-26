@@ -6,6 +6,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   Text,
   TextInput,
   View,
@@ -52,71 +53,82 @@ export default function LoginScreen() {
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      style={{ flex: 1, backgroundColor: "#0a0b0f", justifyContent: "center", alignItems: "center", padding: 24 }}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      style={{ flex: 1, backgroundColor: "#0a0b0f" }}
     >
-      <View
-        style={{
-          width: "100%",
-          maxWidth: 340,
-          backgroundColor: "#13151c",
-          borderRadius: 20,
-          padding: 28,
+      <ScrollView
+        contentContainerStyle={{
+          flexGrow: 1,
+          justifyContent: "center",
           alignItems: "center",
+          padding: 24,
         }}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
-        <Image
-          source={require("../../assets/icon.png")}
-          style={{ width: 64, height: 64, borderRadius: 16, marginBottom: 16 }}
-        />
-        <Text style={{ color: "#fff", fontSize: 22, fontWeight: "800", marginBottom: 4 }}>
-          Baby Daybook
-        </Text>
-        <Text style={{ color: "#72737f", fontSize: 13, marginBottom: 28, textAlign: "center" }}>
-          Acompanhamento de crescimento
-        </Text>
-
-        <Text style={{ color: "#a0a1aa", fontSize: 11, marginBottom: 6, alignSelf: "flex-start" }}>EMAIL</Text>
-        <TextInput
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          keyboardType="email-address"
-          placeholderTextColor="#4a4b58"
-          placeholder="seu@email.com"
-          style={[inputStyle, { width: "100%" }]}
-        />
-
-        <Text style={{ color: "#a0a1aa", fontSize: 11, marginBottom: 6, marginTop: 14, alignSelf: "flex-start" }}>SENHA</Text>
-        <TextInput
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          placeholderTextColor="#4a4b58"
-          placeholder="••••••••"
-          style={[inputStyle, { width: "100%" }]}
-        />
-
-        <Pressable
-          onPress={handleLogin}
-          disabled={loading}
+        <View
           style={{
-            backgroundColor: "#10b981",
-            borderRadius: 12,
-            paddingVertical: 14,
-            alignItems: "center",
-            marginTop: 24,
             width: "100%",
-            opacity: loading ? 0.7 : 1,
+            maxWidth: 340,
+            backgroundColor: "#13151c",
+            borderRadius: 20,
+            padding: 28,
+            alignItems: "center",
           }}
         >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={{ color: "#fff", fontWeight: "700", fontSize: 16 }}>Entrar</Text>
-          )}
-        </Pressable>
-      </View>
+          <Image
+            source={require("../../assets/icon.png")}
+            style={{ width: 64, height: 64, borderRadius: 16, marginBottom: 16 }}
+          />
+          <Text style={{ color: "#fff", fontSize: 22, fontWeight: "800", marginBottom: 4 }}>
+            Baby Daybook
+          </Text>
+          <Text style={{ color: "#72737f", fontSize: 13, marginBottom: 28, textAlign: "center" }}>
+            Acompanhamento de crescimento
+          </Text>
+
+          <Text style={{ color: "#a0a1aa", fontSize: 11, marginBottom: 6, alignSelf: "flex-start" }}>EMAIL</Text>
+          <TextInput
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+            keyboardType="email-address"
+            placeholderTextColor="#4a4b58"
+            placeholder="seu@email.com"
+            style={[inputStyle, { width: "100%" }]}
+          />
+
+          <Text style={{ color: "#a0a1aa", fontSize: 11, marginBottom: 6, marginTop: 14, alignSelf: "flex-start" }}>SENHA</Text>
+          <TextInput
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+            placeholderTextColor="#4a4b58"
+            placeholder="********"
+            style={[inputStyle, { width: "100%" }]}
+          />
+
+          <Pressable
+            onPress={handleLogin}
+            disabled={loading}
+            style={{
+              backgroundColor: "#10b981",
+              borderRadius: 12,
+              paddingVertical: 14,
+              alignItems: "center",
+              marginTop: 24,
+              width: "100%",
+              opacity: loading ? 0.7 : 1,
+            }}
+          >
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={{ color: "#fff", fontWeight: "700", fontSize: 16 }}>Entrar</Text>
+            )}
+          </Pressable>
+        </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }

@@ -13,7 +13,12 @@ import {
 import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { format, parseISO, differenceInMonths, differenceInYears } from "date-fns";
-import { ageInMonths, ageInMonthsPrecise, getP50EquivalentInfo } from "@/utils/growthCurves";
+import {
+  ageInMonths,
+  ageInMonthsPrecise,
+  getP50EquivalentInfo,
+  getValuePercentile,
+} from "@/utils/growthCurves";
 import { Ionicons } from "@expo/vector-icons";
 import { useChild, useChildPhotoUrl, useChildren } from "@/hooks/useChildren";
 import {
@@ -112,8 +117,12 @@ function MeasurementSummary({
 
   return (
     <View style={{ flexDirection: "row", paddingHorizontal: 16, marginBottom: 12, gap: 8 }}>
-      {items.map(({ label, m, value, metric, unit, decimals }) => {
+      {items.map(({ label, m, value, metric, unit, decimals, std }) => {
         const month = m ? ageInMonthsPrecise(birthDate, m.date) : null;
+        const percentile =
+          month != null && value != null
+            ? getValuePercentile(metric, sex, std ?? standard, month, value)
+            : null;
         const p50Info =
           month != null && value != null ? getP50EquivalentInfo(metric, sex, month, value) : null;
         return (
@@ -127,8 +136,13 @@ function MeasurementSummary({
                 <Text style={{ color: "#ecfdf5", fontSize: 13, fontWeight: "700" }}>
                   {value.toFixed(decimals)} {unit}
                 </Text>
-                {p50Info ? (
+                {percentile ? (
                   <Text style={{ color: "#10b981", fontSize: 11, marginTop: 1 }}>
+                    {percentile}
+                  </Text>
+                ) : null}
+                {p50Info ? (
+                  <Text style={{ color: "#72737f", fontSize: 9, marginTop: 1 }}>
                     P50 aos {p50Info.ageLabel}
                   </Text>
                 ) : null}

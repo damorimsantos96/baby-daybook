@@ -34,6 +34,7 @@ interface HoverRow {
   name: string;
   p50Age: string | null;
   p50Delta: string | null;
+  percentile: number;
   value: number;
 }
 
@@ -166,6 +167,7 @@ export function ComparisonGrowthChart({
           name: series.name,
           p50Age: nearestPoint.p50Age,
           p50Delta: nearestPoint.p50Delta,
+          percentile: nearestPoint.percentile,
           value: nearestPoint.value,
         };
       })
@@ -299,6 +301,9 @@ export function ComparisonGrowthChart({
               {hoverInfo.rows.map((row) => (
                 <div key={`${row.name}-${row.date}`} style={{ marginBottom: 6 }}>
                   <div style={{ color: row.color, fontWeight: 700 }}>{row.name}</div>
+                  <div style={{ color: "#10b981", fontSize: 11 }}>
+                    P{Math.round(row.percentile)}
+                  </div>
                   <div style={{ color: "#ffffff" }}>
                     {`${row.value.toFixed(metric === "weight" ? 2 : 1)} ${unit}`}
                   </div>

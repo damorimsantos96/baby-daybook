@@ -118,10 +118,10 @@ export function ComparisonGrowthChart({
     if (!prepared) return [];
 
     return prepared.series.map((series) => {
-      if (series.points.length < 2) return { ...series, path: null };
+      if (series.linePoints.length < 2) return { ...series, path: null };
 
       const path = Skia.Path.Make();
-      series.points.forEach((point, index) => {
+      series.linePoints.forEach((point, index) => {
         const x = toX(point.month, prepared.minMonth, prepared.maxMonth, chartWidth);
         const y = toY(point.percentile);
         if (index === 0) path.moveTo(x, y);

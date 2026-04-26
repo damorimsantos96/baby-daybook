@@ -182,11 +182,27 @@ export function getValuePercentile(
   month: number,
   value: number
 ): string {
+  const percentile = getValuePercentileNumber(metric, sex, standard, month, value);
+  if (percentile == null) return "";
+  return formatPercentileLabel(percentile);
+}
+
+export function getValuePercentileNumber(
+  metric: GrowthMetric,
+  sex: Sex,
+  standard: GrowthStandard,
+  month: number,
+  value: number
+): number | null {
   const row = interpolateRow(getTable(metric, sex, standard), month);
-  if (!row) return "";
+  if (!row) return null;
 
   const percentile = normalCdf(lmsZ(row, value)) * 100;
-  if (!Number.isFinite(percentile)) return "";
+  if (!Number.isFinite(percentile)) return null;
+  return Math.max(0, Math.min(100, percentile));
+}
+
+export function formatPercentileLabel(percentile: number): string {
   if (percentile <= 3) return "<= P3";
   if (percentile >= 99.5) return "P99+";
   return `P${Math.round(percentile)}`;

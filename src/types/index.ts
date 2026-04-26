@@ -40,7 +40,7 @@ export interface AppVersionConfig {
   updated_at: string;
 }
 
-export type GrowthStandard = "WHO" | "CDC";
+export type GrowthStandard = "WHO" | "WHO2007";
 export type GrowthMetric = "weight" | "height" | "head";
 export type PercentileMode = 3 | 5; // 3 lines (P3/P50/P97) or 5 lines (P3/P15/P50/P85/P97)
 

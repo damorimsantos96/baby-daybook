@@ -1,16 +1,14 @@
 import React, { useMemo, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
-import {
-  Canvas,
-  Circle,
-  DashPathEffect,
-  Line,
-  Path,
-  Skia,
-  vec,
-} from "@shopify/react-native-skia";
+import { Canvas, Circle, DashPathEffect, Line, Path, Skia, vec } from "@shopify/react-native-skia";
 import { format, parseISO } from "date-fns";
-import { ageInMonthsPrecise, getPercentileCurve, getValuePercentile } from "@/utils/growthCurves";
+import {
+  ageInMonthsPrecise,
+  getPercentileCurve,
+  getReferenceCaption,
+  getReferenceRange,
+  getValuePercentile,
+} from "@/utils/growthCurves";
 import type {
   GrowthMetric,
   GrowthStandard,
@@ -20,7 +18,6 @@ import type {
   Sex,
 } from "@/types";
 
-// ─── Layout constants ─────────────────────────────────────────────────────────
 const PAD_LEFT = 48;
 const PAD_RIGHT = 16;
 const PAD_TOP = 12;
@@ -30,75 +27,79 @@ const MONTH_WIDTH = 5;
 const TITLE_H = 26;
 
 const COLORS = {
-  p50:   "#10b981",
-  p15:   "#f59e0b",
-  p85:   "#f59e0b",
-  p3:    "#ef4444",
-  p97:   "#ef4444",
+  p50: "#10b981",
+  p15: "#f59e0b",
+  p85: "#f59e0b",
+  p3: "#ef4444",
+  p97: "#ef4444",
   child: "#ffffff",
-  dot:   "#10b981",
-  axis:  "#4a4b58",
+  dot: "#10b981",
+  axis: "#4a4b58",
   label: "#72737f",
 };
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function range(arr: number[]): [number, number] {
-  return [Math.min(...arr), Math.max(...arr)];
+function range(values: number[]): [number, number] {
+  return [Math.min(...values), Math.max(...values)];
 }
 
-function toX(month: number, minMonth: number, maxMonth: number, w: number): number {
-  if (maxMonth === minMonth) return PAD_LEFT + w / 2;
-  return PAD_LEFT + ((month - minMonth) / (maxMonth - minMonth)) * w;
+function toX(month: number, minMonth: number, maxMonth: number, width: number): number {
+  if (maxMonth === minMonth) return PAD_LEFT + width / 2;
+  return PAD_LEFT + ((month - minMonth) / (maxMonth - minMonth)) * width;
 }
 
-function toY(val: number, minVal: number, maxVal: number): number {
-  const h = CHART_H - PAD_TOP - PAD_BOTTOM;
-  if (maxVal === minVal) return PAD_TOP + h / 2;
-  return CHART_H - PAD_BOTTOM - ((val - minVal) / (maxVal - minVal)) * h;
+function toY(value: number, minValue: number, maxValue: number): number {
+  const height = CHART_H - PAD_TOP - PAD_BOTTOM;
+  if (maxValue === minValue) return PAD_TOP + height / 2;
+  return CHART_H - PAD_BOTTOM - ((value - minValue) / (maxValue - minValue)) * height;
 }
 
-function interp(
+function interpolate(
   curve: PercentilePoint[],
   month: number,
-  get: (p: PercentilePoint) => number
+  getter: (point: PercentilePoint) => number
 ): number | null {
   if (!curve.length) return null;
-  if (month <= curve[0].month) return get(curve[0]);
-  const last = curve[curve.length - 1];
-  if (month >= last.month) return get(last);
-  for (let i = 0; i < curve.length - 1; i++) {
-    if (curve[i].month <= month && month < curve[i + 1].month) {
-      const t = (month - curve[i].month) / (curve[i + 1].month - curve[i].month);
-      return get(curve[i]) * (1 - t) + get(curve[i + 1]) * t;
+  if (month < curve[0].month || month > curve[curve.length - 1].month) return null;
+
+  for (const point of curve) {
+    if (point.month === month) return getter(point);
+  }
+
+  for (let index = 0; index < curve.length - 1; index += 1) {
+    const left = curve[index];
+    const right = curve[index + 1];
+    if (left.month < month && month < right.month) {
+      const t = (month - left.month) / (right.month - left.month);
+      return getter(left) + (getter(right) - getter(left)) * t;
     }
   }
+
   return null;
 }
 
 interface TooltipData {
-  svgX: number;
-  month: number;
-  p3: number | null;
-  p50: number | null;
-  p97: number | null;
-  p15: number | null;
-  p85: number | null;
-  childValue: number | null;
   childDate: string | null;
   childPercentile: string | null;
+  childValue: number | null;
+  month: number;
+  p15: number | null;
+  p3: number | null;
+  p50: number | null;
+  p85: number | null;
+  p97: number | null;
+  svgX: number;
 }
 
 interface Props {
-  metric: GrowthMetric;
-  label: string;
-  unit: string;
   birthDate: string;
-  sex: Sex;
-  measurements: Measurement[];
-  standard: GrowthStandard;
-  percentileMode: PercentileMode;
   containerWidth?: number;
+  label: string;
+  measurements: Measurement[];
+  metric: GrowthMetric;
+  percentileMode: PercentileMode;
+  sex: Sex;
+  standard: GrowthStandard;
+  unit: string;
 }
 
 export function GrowthChart({
@@ -115,167 +116,172 @@ export function GrowthChart({
   const [tooltipData, setTooltipData] = useState<TooltipData | null>(null);
 
   const decimals = metric === "weight" ? 2 : 1;
-
-  const dataPoints = useMemo(() => {
-    const allMetric = measurements
-      .filter((m) => {
-        if (metric === "weight") return m.weight_kg != null;
-        if (metric === "height") return m.height_cm != null;
-        return m.head_circumference_cm != null;
-      })
-      .map((m) => ({
-        month: ageInMonthsPrecise(birthDate, m.date),
-        value:
-          metric === "weight"
-            ? (m.weight_kg as number)
-            : metric === "height"
-            ? (m.height_cm as number)
-            : (m.head_circumference_cm as number),
-        date: m.date,
-        ghost: false,
-      }))
-      .sort((a, b) => a.month - b.month);
-
-    if (standard !== "CDC") return allMetric;
-
-    const pre24 = allMetric.filter((d) => d.month < 24);
-    const post24 = allMetric.filter((d) => d.month >= 24);
-
-    if (pre24.length === 0) return post24;
-
-    // Anchor line at left edge using last pre-24m value (no dot rendered)
-    const anchor = pre24[pre24.length - 1];
-    return [{ ...anchor, month: 24, ghost: true }, ...post24];
-  }, [measurements, birthDate, metric, standard]);
+  const referenceRange = useMemo(() => getReferenceRange(metric, standard), [metric, standard]);
 
   const curve = useMemo(
     () => getPercentileCurve(metric, sex, standard, percentileMode),
     [metric, sex, standard, percentileMode]
   );
 
-  const { minMonth, maxMonth, canvasW } = useMemo(() => {
-    if (!curve.length) return { minMonth: 0, maxMonth: 60, canvasW: containerWidth ?? 300 };
-    const curveMin = curve[0].month;
+  const dataPoints = useMemo(() => {
+    const rawPoints = measurements
+      .filter((measurement) => {
+        if (metric === "weight") return measurement.weight_kg != null;
+        if (metric === "height") return measurement.height_cm != null;
+        return measurement.head_circumference_cm != null;
+      })
+      .map((measurement) => ({
+        date: measurement.date,
+        ghost: false,
+        month: ageInMonthsPrecise(birthDate, measurement.date),
+        value:
+          metric === "weight"
+            ? (measurement.weight_kg as number)
+            : metric === "height"
+            ? (measurement.height_cm as number)
+            : (measurement.head_circumference_cm as number),
+      }))
+      .sort((left, right) => left.month - right.month);
+
+    if (!referenceRange) return [];
+
+    const inRange = rawPoints.filter(
+      (point) =>
+        point.month >= referenceRange.startMonth && point.month <= referenceRange.endMonth
+    );
+    if (!inRange.length) return [];
+    if (referenceRange.startMonth === 0) return inRange;
+
+    const beforeRange = rawPoints.filter((point) => point.month < referenceRange.startMonth);
+    if (!beforeRange.length) return inRange;
+
+    return [
+      { ...beforeRange[beforeRange.length - 1], ghost: true, month: referenceRange.startMonth },
+      ...inRange,
+    ];
+  }, [birthDate, measurements, metric, referenceRange]);
+
+  const { minMonth, maxMonth, canvasWidth } = useMemo(() => {
+    if (!curve.length) return { canvasWidth: containerWidth ?? 300, maxMonth: 60, minMonth: 0 };
+
+    const min = curve[0].month;
     const curveMax = curve[curve.length - 1].month;
-    const lastDataMonth = dataPoints.length > 0
-      ? dataPoints[dataPoints.length - 1].month
-      : curveMax;
-    const lo = curveMin;
-    // Extend hi to the next curve point at or beyond lastDataMonth so child
-    // data never appears past the reference curves.
-    const nextCurvePt = curve.find((p) => p.month >= lastDataMonth);
-    const hi = nextCurvePt ? nextCurvePt.month : curveMax;
-    const spanW = (hi - lo) * MONTH_WIDTH;
-    const w = Math.max(spanW, containerWidth ?? 300);
-    return { minMonth: lo, maxMonth: hi, canvasW: w };
-  }, [curve, dataPoints, containerWidth]);
+    const lastDataMonth = dataPoints.length ? dataPoints[dataPoints.length - 1].month : curveMax;
+    const nextCurvePoint = curve.find((point) => point.month >= lastDataMonth);
+    const max = nextCurvePoint ? nextCurvePoint.month : curveMax;
+    return {
+      canvasWidth: Math.max((max - min) * MONTH_WIDTH, containerWidth ?? 300),
+      maxMonth: max,
+      minMonth: min,
+    };
+  }, [containerWidth, curve, dataPoints]);
 
   const clippedCurve = useMemo(
-    () => curve.filter((p) => p.month <= maxMonth),
-    [curve, maxMonth]
+    () => curve.filter((point) => point.month >= minMonth && point.month <= maxMonth),
+    [curve, minMonth, maxMonth]
   );
 
-  const chartW = canvasW - PAD_LEFT - PAD_RIGHT;
+  const chartWidth = canvasWidth - PAD_LEFT - PAD_RIGHT;
 
-  const { minVal, maxVal } = useMemo(() => {
-    // Use clippedCurve (not full curve) so CDC's 24–240m range doesn't
-    // inflate the Y axis when only showing a 24–55m window.
-    const allVals = [
-      ...clippedCurve.map((p) => p.p3),
-      ...clippedCurve.map((p) => p.p97),
-      ...dataPoints.map((d) => d.value),
+  const { minValue, maxValue } = useMemo(() => {
+    const allValues = [
+      ...clippedCurve.map((point) => point.p3),
+      ...clippedCurve.map((point) => point.p97),
+      ...dataPoints.map((point) => point.value),
     ];
-    if (!allVals.length) return { minVal: 0, maxVal: 20 };
-    const [lo, hi] = range(allVals);
-    const pad = (hi - lo) * 0.1 || 1;
-    return { minVal: lo - pad, maxVal: hi + pad };
+    if (!allValues.length) return { maxValue: 20, minValue: 0 };
+
+    const [min, max] = range(allValues);
+    const padding = (max - min) * 0.1 || 1;
+    return { maxValue: max + padding, minValue: min - padding };
   }, [clippedCurve, dataPoints]);
-
-  // ─── Build percentile paths ──────────────────────────────────────────────
-
-  function buildPath(getter: (p: PercentilePoint) => number) {
-    if (!clippedCurve.length) return null;
-    const path = Skia.Path.Make();
-    clippedCurve.forEach((pt, i) => {
-      const x = toX(pt.month, minMonth, maxMonth, chartW);
-      const y = toY(getter(pt), minVal, maxVal);
-      if (i === 0) path.moveTo(x, y);
-      else path.lineTo(x, y);
-    });
-    return path;
-  }
-
-  const pathP50 = buildPath((p) => p.p50);
-  const pathP15 = buildPath((p) => p.p15);
-  const pathP85 = buildPath((p) => p.p85);
-  const pathP3  = buildPath((p) => p.p3);
-  const pathP97 = buildPath((p) => p.p97);
-
-  const childPath = useMemo(() => {
-    if (dataPoints.length < 2) return null;
-    const path = Skia.Path.Make();
-    dataPoints.forEach((pt, i) => {
-      const x = toX(pt.month, minMonth, maxMonth, chartW);
-      const y = toY(pt.value, minVal, maxVal);
-      if (i === 0) path.moveTo(x, y);
-      else path.lineTo(x, y);
-    });
-    return path;
-  }, [dataPoints, minMonth, maxMonth, chartW, minVal, maxVal]);
-
-  // ─── Axis ticks ───────────────────────────────────────────────────────────
 
   const xTicks = useMemo(() => {
     const ticks: number[] = [];
     const step = maxMonth - minMonth > 120 ? 24 : maxMonth - minMonth > 48 ? 12 : 6;
-    for (let m = minMonth; m <= maxMonth; m += step) ticks.push(m);
+    for (let month = minMonth; month <= maxMonth; month += step) {
+      ticks.push(month);
+    }
     return ticks;
-  }, [minMonth, maxMonth]);
+  }, [maxMonth, minMonth]);
 
   const yTicks = useMemo(() => {
     const count = 5;
-    const step = (maxVal - minVal) / count;
-    return Array.from({ length: count + 1 }, (_, i) => minVal + i * step);
-  }, [minVal, maxVal]);
+    const step = (maxValue - minValue) / count;
+    return Array.from({ length: count + 1 }, (_, index) => minValue + index * step);
+  }, [maxValue, minValue]);
 
-  // ─── Touch tooltip ────────────────────────────────────────────────────────
+  function buildPath(getter: (point: PercentilePoint) => number) {
+    if (!clippedCurve.length) return null;
+
+    const path = Skia.Path.Make();
+    clippedCurve.forEach((point, index) => {
+      const x = toX(point.month, minMonth, maxMonth, chartWidth);
+      const y = toY(getter(point), minValue, maxValue);
+      if (index === 0) path.moveTo(x, y);
+      else path.lineTo(x, y);
+    });
+    return path;
+  }
+
+  const pathP3 = buildPath((point) => point.p3);
+  const pathP15 = buildPath((point) => point.p15);
+  const pathP50 = buildPath((point) => point.p50);
+  const pathP85 = buildPath((point) => point.p85);
+  const pathP97 = buildPath((point) => point.p97);
+
+  const childPath = useMemo(() => {
+    if (dataPoints.length < 2) return null;
+
+    const path = Skia.Path.Make();
+    dataPoints.forEach((point, index) => {
+      const x = toX(point.month, minMonth, maxMonth, chartWidth);
+      const y = toY(point.value, minValue, maxValue);
+      if (index === 0) path.moveTo(x, y);
+      else path.lineTo(x, y);
+    });
+    return path;
+  }, [chartWidth, dataPoints, maxMonth, maxValue, minMonth, minValue]);
 
   function handleTouch(locationX: number) {
-    if (locationX < PAD_LEFT || locationX > PAD_LEFT + chartW) {
+    if (locationX < PAD_LEFT || locationX > PAD_LEFT + chartWidth) {
       setTooltipData(null);
       return;
     }
-    const month = minMonth + ((locationX - PAD_LEFT) / chartW) * (maxMonth - minMonth);
-    const clamped = Math.max(minMonth, Math.min(maxMonth, month));
 
-    const nearest =
+    const month = minMonth + ((locationX - PAD_LEFT) / chartWidth) * (maxMonth - minMonth);
+    const clampedMonth = Math.max(minMonth, Math.min(maxMonth, month));
+    const nearestPoint =
       dataPoints.length > 0
-        ? dataPoints.reduce((a, b) =>
-            Math.abs(a.month - clamped) < Math.abs(b.month - clamped) ? a : b
+        ? dataPoints.reduce((left, right) =>
+            Math.abs(left.month - clampedMonth) < Math.abs(right.month - clampedMonth)
+              ? left
+              : right
           )
         : null;
+    const matchedPoint =
+      nearestPoint && Math.abs(nearestPoint.month - clampedMonth) <= 4 ? nearestPoint : null;
 
-    const nearestMatch = nearest && Math.abs(nearest.month - clamped) <= 4 ? nearest : null;
     setTooltipData({
-      svgX: locationX,
-      month: clamped,
-      p3:  interp(curve, clamped, (p) => p.p3),
-      p50: interp(curve, clamped, (p) => p.p50),
-      p97: interp(curve, clamped, (p) => p.p97),
-      p15: interp(curve, clamped, (p) => p.p15),
-      p85: interp(curve, clamped, (p) => p.p85),
-      childValue: nearestMatch ? nearestMatch.value : null,
-      childDate:  nearestMatch ? nearestMatch.date  : null,
-      childPercentile: nearestMatch
-        ? getValuePercentile(metric, sex, standard, nearestMatch.month, nearestMatch.value)
+      childDate: matchedPoint ? matchedPoint.date : null,
+      childPercentile: matchedPoint
+        ? getValuePercentile(metric, sex, standard, matchedPoint.month, matchedPoint.value)
         : null,
+      childValue: matchedPoint ? matchedPoint.value : null,
+      month: clampedMonth,
+      p15: interpolate(clippedCurve, clampedMonth, (point) => point.p15),
+      p3: interpolate(clippedCurve, clampedMonth, (point) => point.p3),
+      p50: interpolate(clippedCurve, clampedMonth, (point) => point.p50),
+      p85: interpolate(clippedCurve, clampedMonth, (point) => point.p85),
+      p97: interpolate(clippedCurve, clampedMonth, (point) => point.p97),
+      svgX: locationX,
     });
   }
 
-  if (!curve.length) return null;
+  if (!curve.length || !referenceRange) return null;
 
   const tooltipLeft =
-    tooltipData && tooltipData.svgX > canvasW / 2
+    tooltipData && tooltipData.svgX > canvasWidth / 2
       ? tooltipData.svgX - 138
       : (tooltipData?.svgX ?? 0) + 10;
 
@@ -287,26 +293,22 @@ export function GrowthChart({
         {label}
       </Text>
 
-      {/* Canvas + touch overlay */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
         <View style={{ position: "relative" }}>
-          <Canvas style={{ width: canvasW, height: CHART_H }}>
-            {/* Grid lines */}
-            {yTicks.map((v, i) => {
-              const y = toY(v, minVal, maxVal);
+          <Canvas style={{ height: CHART_H, width: canvasWidth }}>
+            {yTicks.map((value, index) => {
+              const y = toY(value, minValue, maxValue);
               return (
-                <React.Fragment key={i}>
-                  <Line
-                    p1={vec(PAD_LEFT, y)}
-                    p2={vec(canvasW - PAD_RIGHT, y)}
-                    color={COLORS.axis}
-                    strokeWidth={0.5}
-                  />
-                </React.Fragment>
+                <Line
+                  key={index}
+                  p1={vec(PAD_LEFT, y)}
+                  p2={vec(canvasWidth - PAD_RIGHT, y)}
+                  color={COLORS.axis}
+                  strokeWidth={0.5}
+                />
               );
             })}
 
-            {/* Percentile curves */}
             {pathP3 && (
               <Path path={pathP3} color={COLORS.p3} style="stroke" strokeWidth={1}>
                 <DashPathEffect intervals={[4, 4]} />
@@ -327,23 +329,22 @@ export function GrowthChart({
                 <DashPathEffect intervals={[6, 3]} />
               </Path>
             )}
-            {pathP50 && (
-              <Path path={pathP50} color={COLORS.p50} style="stroke" strokeWidth={1.5} />
-            )}
+            {pathP50 && <Path path={pathP50} color={COLORS.p50} style="stroke" strokeWidth={1.5} />}
 
-            {/* Child line */}
-            {childPath && (
-              <Path path={childPath} color={COLORS.child} style="stroke" strokeWidth={2} />
-            )}
+            {childPath && <Path path={childPath} color={COLORS.child} style="stroke" strokeWidth={2} />}
 
-            {/* Child dots — skip ghost anchor */}
-            {dataPoints.filter((pt) => !pt.ghost).map((pt, i) => {
-              const x = toX(pt.month, minMonth, maxMonth, chartW);
-              const y = toY(pt.value, minVal, maxVal);
-              return <Circle key={i} cx={x} cy={y} r={5} color={COLORS.dot} />;
-            })}
+            {dataPoints
+              .filter((point) => !point.ghost)
+              .map((point, index) => (
+                <Circle
+                  key={index}
+                  cx={toX(point.month, minMonth, maxMonth, chartWidth)}
+                  cy={toY(point.value, minValue, maxValue)}
+                  r={5}
+                  color={COLORS.dot}
+                />
+              ))}
 
-            {/* Tooltip crosshair */}
             {tooltipData && (
               <Line
                 p1={vec(tooltipData.svgX, PAD_TOP)}
@@ -354,54 +355,25 @@ export function GrowthChart({
             )}
           </Canvas>
 
-          {/* Touch capture layer */}
           <View
-            style={{ position: "absolute", top: 0, left: 0, width: canvasW, height: CHART_H }}
-            onTouchStart={(e) => handleTouch(e.nativeEvent.locationX)}
-            onTouchMove={(e) => handleTouch(e.nativeEvent.locationX)}
+            style={{ height: CHART_H, left: 0, position: "absolute", top: 0, width: canvasWidth }}
+            onTouchStart={(event) => handleTouch(event.nativeEvent.locationX)}
+            onTouchMove={(event) => handleTouch(event.nativeEvent.locationX)}
             onTouchEnd={() => setTooltipData(null)}
           />
 
-          {/* Y axis labels */}
-          <View
-            pointerEvents="none"
-            style={{ position: "absolute", top: 0, left: 0, width: PAD_LEFT, height: CHART_H }}
-          >
-            {yTicks.map((v, i) => {
-              const pct = (v - minVal) / (maxVal - minVal);
-              const y = CHART_H - PAD_BOTTOM - pct * (CHART_H - PAD_TOP - PAD_BOTTOM) - 6;
-              return (
-                <Text
-                  key={i}
-                  style={{
-                    position: "absolute",
-                    top: y,
-                    left: 0,
-                    width: PAD_LEFT - 6,
-                    color: COLORS.label,
-                    fontSize: 9,
-                    textAlign: "right",
-                  }}
-                >
-                  {v.toFixed(metric === "weight" ? 1 : 0)}
-                </Text>
-              );
-            })}
-          </View>
-
-          {/* Tooltip box */}
           {tooltipData && (
             <View
               style={{
+                backgroundColor: "#1c1d23",
+                borderColor: "#2c2d36",
+                borderRadius: 8,
+                borderWidth: 1,
+                left: tooltipLeft,
+                minWidth: 155,
+                padding: 10,
                 position: "absolute",
                 top: PAD_TOP + 8,
-                left: tooltipLeft,
-                backgroundColor: "#1c1d23",
-                borderRadius: 8,
-                padding: 10,
-                borderWidth: 1,
-                borderColor: "#2c2d36",
-                minWidth: 155,
                 zIndex: 10,
               }}
             >
@@ -418,28 +390,30 @@ export function GrowthChart({
                     <Text style={{ color: "#72737f", fontSize: 9, marginBottom: 4 }}>
                       {format(parseISO(tooltipData.childDate), "dd/MM/yyyy")}
                     </Text>
-                  ) : <View style={{ marginBottom: 4 }} />}
+                  ) : (
+                    <View style={{ marginBottom: 4 }} />
+                  )}
                 </>
               )}
               <Text style={{ color: COLORS.p50, fontSize: 11, marginBottom: 2 }}>
-                P50: {tooltipData.p50?.toFixed(decimals) ?? "—"}
+                P50: {tooltipData.p50?.toFixed(decimals) ?? "--"}
               </Text>
               {percentileMode === 5 && (
                 <>
                   <Text style={{ color: COLORS.p15, fontSize: 11, marginBottom: 2 }}>
-                    P15: {tooltipData.p15?.toFixed(decimals) ?? "—"}
+                    P15: {tooltipData.p15?.toFixed(decimals) ?? "--"}
                   </Text>
                   <Text style={{ color: COLORS.p85, fontSize: 11, marginBottom: 2 }}>
-                    P85: {tooltipData.p85?.toFixed(decimals) ?? "—"}
+                    P85: {tooltipData.p85?.toFixed(decimals) ?? "--"}
                   </Text>
                 </>
               )}
-              <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 8 }}>
+              <View style={{ flexDirection: "row", gap: 8, justifyContent: "space-between" }}>
                 <Text style={{ color: COLORS.p3, fontSize: 11 }}>
-                  P3: {tooltipData.p3?.toFixed(decimals) ?? "—"}
+                  P3: {tooltipData.p3?.toFixed(decimals) ?? "--"}
                 </Text>
                 <Text style={{ color: COLORS.p97, fontSize: 11 }}>
-                  P97: {tooltipData.p97?.toFixed(decimals) ?? "—"}
+                  P97: {tooltipData.p97?.toFixed(decimals) ?? "--"}
                 </Text>
               </View>
             </View>
@@ -447,53 +421,74 @@ export function GrowthChart({
         </View>
       </ScrollView>
 
-      {/* X axis labels */}
-      <View style={{ height: 18, position: "relative", marginLeft: 0 }}>
-        {xTicks.map((m) => {
-          const x = PAD_LEFT + ((m - minMonth) / (maxMonth - minMonth)) * chartW;
+      <View style={{ height: 18, marginLeft: 0, position: "relative" }}>
+        {xTicks.map((month) => {
+          const x = PAD_LEFT + ((month - minMonth) / (maxMonth - minMonth)) * chartWidth;
           return (
             <Text
-              key={m}
+              key={month}
               style={{
-                position: "absolute",
-                left: x - 12,
                 color: COLORS.label,
                 fontSize: 9,
-                width: 28,
+                left: x - 12,
+                position: "absolute",
                 textAlign: "center",
+                width: 28,
               }}
             >
-              {m}m
+              {month}m
             </Text>
           );
         })}
       </View>
 
-      {/* Legend */}
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12, marginTop: 4, marginLeft: PAD_LEFT }}>
+      <View style={{ height: CHART_H, left: 0, position: "absolute", top: TITLE_H }}>
+        {yTicks.map((value, index) => {
+          const ratio = (value - minValue) / (maxValue - minValue);
+          const y = CHART_H - PAD_BOTTOM - ratio * (CHART_H - PAD_TOP - PAD_BOTTOM) - 6;
+          return (
+            <Text
+              key={index}
+              style={{
+                color: COLORS.label,
+                fontSize: 9,
+                position: "absolute",
+                right: 2,
+                textAlign: "right",
+                top: y,
+                width: PAD_LEFT - 4,
+              }}
+            >
+              {value.toFixed(metric === "weight" ? 1 : 0)}
+            </Text>
+          );
+        })}
+      </View>
+
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12, marginLeft: PAD_LEFT, marginTop: 4 }}>
         <LegendItem color={COLORS.p50} label="P50" dashed={false} />
         {percentileMode === 5 && <LegendItem color={COLORS.p15} label="P15/P85" dashed />}
         <LegendItem color={COLORS.p3} label="P3/P97" dashed />
         <LegendItem color={COLORS.child} label="Filho(a)" dashed={false} />
       </View>
 
-      <Text style={{ color: "#72737f", fontSize: 10, marginTop: 2, marginLeft: PAD_LEFT }}>
-        {unit} · {standard} {standard === "WHO" ? "(0–60m)" : "(2–20a)"}
+      <Text style={{ color: "#72737f", fontSize: 10, marginLeft: PAD_LEFT, marginTop: 2 }}>
+        {unit} · {getReferenceCaption(metric, standard)}
       </Text>
     </View>
   );
 }
 
-function LegendItem({ color, label, dashed }: { color: string; label: string; dashed: boolean }) {
+function LegendItem({ color, label, dashed }: { color: string; dashed: boolean; label: string }) {
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+    <View style={{ alignItems: "center", flexDirection: "row", gap: 4 }}>
       <View
         style={{
-          width: 16,
-          height: 2,
           backgroundColor: color,
-          opacity: dashed ? 0.7 : 1,
           borderStyle: dashed ? "dashed" : "solid",
+          height: 2,
+          opacity: dashed ? 0.7 : 1,
+          width: 16,
         }}
       />
       <Text style={{ color: "#a0a1aa", fontSize: 10 }}>{label}</Text>

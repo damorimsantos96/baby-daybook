@@ -33,8 +33,8 @@ interface TooltipRow {
   color: string;
   date: string;
   name: string;
-  p50AgeEquiv: string | null;
-  percentile: number;
+  p50Age: string | null;
+  p50Delta: string | null;
   value: number;
 }
 
@@ -160,8 +160,8 @@ export function ComparisonGrowthChart({
           color: series.color,
           date: nearestPoint.date,
           name: series.name,
-          p50AgeEquiv: nearestPoint.p50AgeEquiv,
-          percentile: nearestPoint.percentile,
+          p50Age: nearestPoint.p50Age,
+          p50Delta: nearestPoint.p50Delta,
           value: nearestPoint.value,
         };
       })
@@ -189,7 +189,7 @@ export function ComparisonGrowthChart({
 
   const tooltipLeft =
     tooltipData && tooltipData.svgX > canvasWidth / 2
-      ? tooltipData.svgX - 172
+      ? tooltipData.svgX - 196
       : (tooltipData?.svgX ?? 0) + 10;
 
   return (
@@ -277,7 +277,7 @@ export function ComparisonGrowthChart({
                 borderRadius: 8,
                 borderWidth: 1,
                 left: tooltipLeft,
-                minWidth: 185,
+                minWidth: 206,
                 padding: 10,
                 position: "absolute",
                 top: PAD_TOP + 8,
@@ -291,10 +291,13 @@ export function ComparisonGrowthChart({
                 <View key={`${row.name}-${row.date}`} style={{ marginBottom: 6 }}>
                   <Text style={{ color: row.color, fontSize: 12, fontWeight: "700" }}>{row.name}</Text>
                   <Text style={{ color: "#ffffff", fontSize: 11 }}>
-                    P{Math.round(row.percentile)} · {row.value.toFixed(metric === "weight" ? 2 : 1)} {unit}
+                    {row.value.toFixed(metric === "weight" ? 2 : 1)} {unit}
                   </Text>
-                  {row.p50AgeEquiv ? (
-                    <Text style={{ color: "#72737f", fontSize: 9 }}>P50 aos {row.p50AgeEquiv}</Text>
+                  {row.p50Age ? (
+                    <Text style={{ color: "#72737f", fontSize: 9 }}>P50 aos {row.p50Age}</Text>
+                  ) : null}
+                  {row.p50Delta ? (
+                    <Text style={{ color: "#72737f", fontSize: 9 }}>P50 em {row.p50Delta}</Text>
                   ) : null}
                   <Text style={{ color: "#72737f", fontSize: 9 }}>
                     {format(parseISO(row.date), "dd/MM/yyyy")}
@@ -364,7 +367,7 @@ export function ComparisonGrowthChart({
       </View>
 
       <Text style={{ color: "#72737f", fontSize: 10, marginLeft: PAD_LEFT, marginTop: 2 }}>
-        {prepared.referenceLabel} · faixa comum atÃ© {prepared.overlapEndMonth.toFixed(0)}m
+        {prepared.referenceLabel} · faixa comum até {prepared.overlapEndMonth.toFixed(0)}m
       </Text>
       {prepared.excludedChildren.length > 0 && (
         <Text style={{ color: "#72737f", fontSize: 10, marginLeft: PAD_LEFT, marginTop: 2 }}>

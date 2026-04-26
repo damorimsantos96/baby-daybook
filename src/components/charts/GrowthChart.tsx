@@ -4,11 +4,10 @@ import { Canvas, Circle, DashPathEffect, Line, Path, Skia, vec } from "@shopify/
 import { format, parseISO } from "date-fns";
 import {
   ageInMonthsPrecise,
-  getP50EquivalentAge,
+  getP50EquivalentInfo,
   getPercentileCurve,
   getReferenceCaption,
   getReferenceRange,
-  getValuePercentile,
 } from "@/utils/growthCurves";
 import type {
   GrowthMetric,
@@ -80,8 +79,8 @@ function interpolate(
 
 interface TooltipData {
   childDate: string | null;
-  childP50AgeEquiv: string | null;
-  childPercentile: string | null;
+  childP50Age: string | null;
+  childP50Delta: string | null;
   childValue: number | null;
   month: number;
   p15: number | null;
@@ -263,15 +262,13 @@ export function GrowthChart({
         : null;
     const matchedPoint =
       nearestPoint && Math.abs(nearestPoint.month - clampedMonth) <= 4 ? nearestPoint : null;
+    const childP50Info =
+      matchedPoint ? getP50EquivalentInfo(metric, sex, matchedPoint.month, matchedPoint.value) : null;
 
     setTooltipData({
       childDate: matchedPoint ? matchedPoint.date : null,
-      childP50AgeEquiv: matchedPoint
-        ? getP50EquivalentAge(metric, sex, matchedPoint.value)
-        : null,
-      childPercentile: matchedPoint
-        ? getValuePercentile(metric, sex, standard, matchedPoint.month, matchedPoint.value)
-        : null,
+      childP50Age: childP50Info?.ageLabel ?? null,
+      childP50Delta: childP50Info?.deltaLabel ?? null,
       childValue: matchedPoint ? matchedPoint.value : null,
       month: clampedMonth,
       p15: interpolate(clippedCurve, clampedMonth, (point) => point.p15),
@@ -389,11 +386,15 @@ export function GrowthChart({
                 <>
                   <Text style={{ color: "#ffffff", fontSize: 12, fontWeight: "600" }}>
                     {tooltipData.childValue.toFixed(decimals)} {unit}
-                    {tooltipData.childPercentile ? `  ${tooltipData.childPercentile}` : ""}
                   </Text>
-                  {tooltipData.childP50AgeEquiv ? (
+                  {tooltipData.childP50Age ? (
                     <Text style={{ color: "#72737f", fontSize: 9, marginTop: 1 }}>
-                      P50 aos {tooltipData.childP50AgeEquiv}
+                      P50 aos {tooltipData.childP50Age}
+                    </Text>
+                  ) : null}
+                  {tooltipData.childP50Delta ? (
+                    <Text style={{ color: "#72737f", fontSize: 9, marginTop: 1 }}>
+                      P50 em {tooltipData.childP50Delta}
                     </Text>
                   ) : null}
                   {tooltipData.childDate ? (

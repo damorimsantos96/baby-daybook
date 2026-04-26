@@ -13,7 +13,7 @@ import {
 import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { format, parseISO, differenceInMonths, differenceInYears } from "date-fns";
-import { ageInMonths, getP50EquivalentAge, getValuePercentile } from "@/utils/growthCurves";
+import { ageInMonths, ageInMonthsPrecise, getP50EquivalentInfo } from "@/utils/growthCurves";
 import { Ionicons } from "@expo/vector-icons";
 import { useChild, useChildPhotoUrl, useChildren } from "@/hooks/useChildren";
 import {
@@ -84,7 +84,7 @@ interface SummaryItem {
   metric: GrowthMetric;
   unit: string;
   decimals: number;
-  std: GrowthStandard;
+  std?: GrowthStandard;
 }
 
 function MeasurementSummary({
@@ -104,21 +104,18 @@ function MeasurementSummary({
     const lh = sorted.find((m) => m.height_cm != null) ?? null;
     const lc = sorted.find((m) => m.head_circumference_cm != null) ?? null;
     return [
-      { label: "Peso", m: lw, value: lw?.weight_kg ?? null, metric: "weight", unit: "kg", decimals: 2, std: standard },
-      { label: "Altura", m: lh, value: lh?.height_cm ?? null, metric: "height", unit: "cm", decimals: 1, std: standard },
+      { label: "Peso", m: lw, value: lw?.weight_kg ?? null, metric: "weight", unit: "kg", decimals: 2 },
+      { label: "Altura", m: lh, value: lh?.height_cm ?? null, metric: "height", unit: "cm", decimals: 1 },
       { label: "Cabeça", m: lc, value: lc?.head_circumference_cm ?? null, metric: "head", unit: "cm", decimals: 1, std: "WHO" },
     ];
   }, [measurements, standard]);
 
   return (
     <View style={{ flexDirection: "row", paddingHorizontal: 16, marginBottom: 12, gap: 8 }}>
-      {items.map(({ label, m, value, metric, unit, decimals, std }) => {
-        const month = m ? ageInMonths(birthDate, m.date) : null;
-        const pct =
-          month != null && value != null
-            ? getValuePercentile(metric, sex, std, month, value)
-            : null;
-        const p50Age = value != null ? getP50EquivalentAge(metric, sex, value) : null;
+      {items.map(({ label, m, value, metric, unit, decimals }) => {
+        const month = m ? ageInMonthsPrecise(birthDate, m.date) : null;
+        const p50Info =
+          month != null && value != null ? getP50EquivalentInfo(metric, sex, month, value) : null;
         return (
           <View
             key={label}
@@ -130,12 +127,14 @@ function MeasurementSummary({
                 <Text style={{ color: "#ecfdf5", fontSize: 13, fontWeight: "700" }}>
                   {value.toFixed(decimals)} {unit}
                 </Text>
-                {pct ? (
-                  <Text style={{ color: "#10b981", fontSize: 11, marginTop: 1 }}>{pct}</Text>
+                {p50Info ? (
+                  <Text style={{ color: "#10b981", fontSize: 11, marginTop: 1 }}>
+                    P50 aos {p50Info.ageLabel}
+                  </Text>
                 ) : null}
-                {p50Age ? (
+                {p50Info ? (
                   <Text style={{ color: "#72737f", fontSize: 9, marginTop: 1 }}>
-                    P50 aos {p50Age}
+                    P50 em {p50Info.deltaLabel}
                   </Text>
                 ) : null}
                 {m ? (
@@ -576,7 +575,7 @@ export default function FilhoScreen() {
                     children={compareChartChildren}
                     currentChildId={child.id}
                     metric="head"
-                    label="CircunferÃªncia da CabeÃ§a"
+                    label="Circunferência da Cabeça"
                     unit="cm"
                     standard={standard}
                     percentileMode={pMode}

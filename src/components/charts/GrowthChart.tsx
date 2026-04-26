@@ -8,6 +8,7 @@ import {
   getPercentileCurve,
   getReferenceCaption,
   getReferenceRange,
+  getValuePercentile,
 } from "@/utils/growthCurves";
 import type {
   GrowthMetric,
@@ -82,6 +83,7 @@ interface TooltipData {
   childDate: string | null;
   childP50Age: string | null;
   childP50Delta: string | null;
+  childPercentile: string | null;
   childValue: number | null;
   month: number;
   p15: number | null;
@@ -273,6 +275,9 @@ export function GrowthChart({
       childDate: matchedPoint ? matchedPoint.date : null,
       childP50Age: childP50Info?.ageLabel ?? null,
       childP50Delta: childP50Info?.deltaLabel ?? null,
+      childPercentile: matchedPoint
+        ? getValuePercentile(metric, sex, standard, matchedPoint.month, matchedPoint.value)
+        : null,
       childValue: matchedPoint ? matchedPoint.value : null,
       month: clampedMonth,
       p15: interpolate(clippedCurve, clampedMonth, (point) => point.p15),
@@ -391,6 +396,11 @@ export function GrowthChart({
                   <Text style={{ color: "#ffffff", fontSize: 12, fontWeight: "600" }}>
                     {tooltipData.childValue.toFixed(decimals)} {unit}
                   </Text>
+                  {tooltipData.childPercentile ? (
+                    <Text style={{ color: "#10b981", fontSize: 11, marginTop: 1 }}>
+                      {tooltipData.childPercentile}
+                    </Text>
+                  ) : null}
                   {tooltipData.childP50Age ? (
                     <Text style={{ color: "#72737f", fontSize: 9, marginTop: 1 }}>
                       P50 aos {tooltipData.childP50Age}

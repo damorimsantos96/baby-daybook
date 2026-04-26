@@ -7,6 +7,7 @@ import {
   getPercentileCurve,
   getReferenceCaption,
   getReferenceRange,
+  getValuePercentile,
 } from "@/utils/growthCurves";
 import type {
   GrowthMetric,
@@ -98,6 +99,7 @@ interface HoverInfo {
   childDate: string | null;
   childP50Age: string | null;
   childP50Delta: string | null;
+  childPercentile: string | null;
   childValue: number | null;
   month: number;
   p15: number | null;
@@ -278,6 +280,9 @@ export function GrowthChart({
       childDate: matchedPoint ? matchedPoint.date : null,
       childP50Age: childP50Info?.ageLabel ?? null,
       childP50Delta: childP50Info?.deltaLabel ?? null,
+      childPercentile: matchedPoint
+        ? getValuePercentile(metric, sex, standard, matchedPoint.month, matchedPoint.value)
+        : null,
       childValue: matchedPoint ? matchedPoint.value : null,
       month: clampedMonth,
       p15: interpolate(clippedCurve, clampedMonth, (point) => point.p15),
@@ -411,6 +416,11 @@ export function GrowthChart({
                     <span style={{ color: "#ffffff", fontWeight: 600 }}>
                       {hoverInfo.childValue.toFixed(decimals)} {unit}
                     </span>
+                    {hoverInfo.childPercentile && (
+                      <div style={{ color: "#10b981", fontSize: 11, marginTop: 1 }}>
+                        {hoverInfo.childPercentile}
+                      </div>
+                    )}
                     {hoverInfo.childP50Age && (
                       <div style={{ color: "#72737f", fontSize: 9, marginTop: 1 }}>
                         P50 aos {hoverInfo.childP50Age}

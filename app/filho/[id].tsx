@@ -151,12 +151,7 @@ function MeasurementSummary({
                 ) : null}
                 {p50Info ? (
                   <Text style={{ color: "#72737f", fontSize: 9, marginTop: 1 }}>
-                    P50 aos {p50Info.ageLabel}
-                  </Text>
-                ) : null}
-                {p50Info ? (
-                  <Text style={{ color: "#72737f", fontSize: 9, marginTop: 1 }}>
-                    P50 em {p50Info.deltaLabel}
+                    P50 aos {p50Info.ageLabel} ({p50Info.deltaLabel})
                   </Text>
                 ) : null}
                 {m ? (

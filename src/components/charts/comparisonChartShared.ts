@@ -22,6 +22,7 @@ export interface ComparisonChartSeries {
   childId: string;
   color: string;
   current: boolean;
+  linePoints: ComparisonChartPoint[];
   name: string;
   points: ComparisonChartPoint[];
 }
@@ -120,16 +121,44 @@ export function buildComparisonChartData({
   if (overlapEndMonth < referenceRange.startMonth) return null;
 
   const series = comparableChildren
-    .map((series, index) => ({
-      childId: series.childId,
-      color: series.childId === currentChildId ? SERIES_COLORS[0] : SERIES_COLORS[(index % (SERIES_COLORS.length - 1)) + 1],
-      current: series.childId === currentChildId,
-      name: series.name,
-      points: series.points.filter(
-        (point) =>
-          point.month >= referenceRange.startMonth && point.month <= overlapEndMonth
-      ),
-    }))
+    .map((series, index) => {
+      const visiblePoints = series.points.filter(
+        (point) => point.month >= referenceRange.startMonth && point.month <= overlapEndMonth
+      );
+      const trailingPoint = series.points.find((point) => point.month > overlapEndMonth) ?? null;
+      const lastVisiblePoint = visiblePoints[visiblePoints.length - 1] ?? null;
+      const linePoints =
+        trailingPoint &&
+        lastVisiblePoint &&
+        lastVisiblePoint.month < overlapEndMonth &&
+        trailingPoint.month > lastVisiblePoint.month
+          ? [
+              ...visiblePoints,
+              {
+                date: lastVisiblePoint.date,
+                month: overlapEndMonth,
+                percentile:
+                  lastVisiblePoint.percentile +
+                  ((trailingPoint.percentile - lastVisiblePoint.percentile) *
+                    (overlapEndMonth - lastVisiblePoint.month)) /
+                    (trailingPoint.month - lastVisiblePoint.month),
+                value: lastVisiblePoint.value,
+              },
+            ]
+          : visiblePoints;
+
+      return {
+        childId: series.childId,
+        color:
+          series.childId === currentChildId
+            ? SERIES_COLORS[0]
+            : SERIES_COLORS[(index % (SERIES_COLORS.length - 1)) + 1],
+        current: series.childId === currentChildId,
+        linePoints,
+        name: series.name,
+        points: visiblePoints,
+      };
+    })
     .filter((series) => series.points.length > 0)
     .sort((left, right) => {
       if (left.current && !right.current) return -1;

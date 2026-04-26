@@ -238,8 +238,8 @@ export function ComparisonGrowthChart({
         })}
 
         {prepared.series.map((series) => {
-          if (series.points.length < 2) return null;
-          const d = buildPath(series.points, prepared.minMonth, prepared.maxMonth, chartWidth);
+          if (series.linePoints.length < 2) return null;
+          const d = buildPath(series.linePoints, prepared.minMonth, prepared.maxMonth, chartWidth);
           // @ts-ignore
           return <path key={series.childId} d={d} fill="none" stroke={series.color} strokeWidth={series.current ? 2.5 : 2} />;
         })}

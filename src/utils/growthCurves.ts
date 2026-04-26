@@ -188,6 +188,6 @@ export function getValuePercentile(
   const percentile = normalCdf(lmsZ(row, value)) * 100;
   if (!Number.isFinite(percentile)) return "";
   if (percentile <= 3) return "<= P3";
-  if (percentile >= 97) return ">= P97";
+  if (percentile >= 99.5) return "P99+";
   return `P${Math.round(percentile)}`;
 }

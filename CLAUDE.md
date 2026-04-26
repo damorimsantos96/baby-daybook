@@ -31,6 +31,7 @@
 - Expo config is in `app.json`.
 - OTA intended for Diego's installed Android app must target the `production` channel.
 - Do not use `npm run update:production` for non-interactive OTA deploys; call `eas update` directly with `EXPO_TOKEN`, `--channel production`, `--environment production`, `--platform android`, and an explicit `--message`.
+- Run git write operations and Expo/EAS deploy commands with elevated permission from the start. Do not first attempt a non-elevated path that may fail on `.git` locks or sandbox restrictions.
 - `runtimeVersion.policy = appVersion`, so native-breaking releases must bump the app version.
 - Native version enforcement is backed by Supabase table `app_version_config`.
 
@@ -124,20 +125,25 @@
 - Preserve React Query invalidation behavior when adding mutations.
 - When touching schema assumptions, read the matching migration before changing TS types.
 - Always run `git status` before modifying anything; treat uncommitted changes as user work unless confirmed otherwise.
+- Always start work from `master`, then create the task branch immediately before editing files.
+- Do not describe a blocked workflow step-by-step if the reliable path is already known; execute the reliable path directly.
 
 ## After Every Change — Mandatory Steps
 After implementing any change, always complete all applicable steps before reporting done:
 
-1. **Create a branch** specific to the work before starting any `feat`, `fix`, `docs`, or `security` change.
-2. **Commit** the changed files with a descriptive message on that branch.
-3. **Merge** the finished branch into `master`.
-4. **Push** `master` to `origin/master`.
-5. **Delete** the branch created for that work after the merge is complete.
-6. **Deploy/update** based on what changed:
+1. **Start on `master`** and sync it if needed.
+2. **Create a branch immediately from `master`** before any `feat`, `fix`, `docs`, or `security` change.
+3. **Use elevated permission immediately** for git commands that write to `.git` and for Expo/EAS commands. Do not wait for sandbox failure.
+4. **Implement directly using the known-good path**. Skip status chatter about fallback attempts, lock errors, or "now preparing git flow" when the final path is already known.
+5. **Commit** the changed files with a descriptive message on that branch.
+6. **Merge** the finished branch into `master`.
+7. **Push** `master` to `origin/master`.
+8. **Delete** the branch created for that work after the merge is complete.
+9. **Deploy/update** based on what changed:
    - JS or asset change for Diego's installed Android app → run `eas update` directly with `EXPO_TOKEN`, `--channel production`, `--environment production`, `--platform android`, and explicit `--message` (OTA; user reopens app).
    - Native/SDK/permission change → new EAS build required; notify Diego to reinstall APK.
-7. Tell Diego in one line what was deployed and what action (if any) he needs to take.
-8. If this file or `AGENTS.md` was edited, commit and push those `.md` changes too; there is no docs-only exception.
+10. Tell Diego in one line what was deployed and what action (if any) he needs to take.
+11. If this file or `AGENTS.md` was edited, commit and push those `.md` changes too; there is no docs-only exception.
 
 ## Response Style
 - Be as concise as possible. Deliver the same information with the fewest words.

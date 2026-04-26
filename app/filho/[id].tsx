@@ -13,7 +13,7 @@ import {
 import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { format, parseISO, differenceInMonths, differenceInYears } from "date-fns";
-import { ageInMonths, getPercentileCurve, getValuePercentile } from "@/utils/growthCurves";
+import { ageInMonths, getValuePercentile } from "@/utils/growthCurves";
 import { Ionicons } from "@expo/vector-icons";
 import { useChild, useChildPhotoUrl } from "@/hooks/useChildren";
 import { useMeasurements, useUpsertMeasurement, useDeleteMeasurement } from "@/hooks/useMeasurements";
@@ -248,11 +248,22 @@ export default function FilhoScreen() {
     () => (child ? differenceInMonths(new Date(), parseISO(child.birth_date)) : 0),
     [child]
   );
-  const cdcAvailable = childAgeMonths >= 24;
+  const who2007Available = childAgeMonths >= 61;
+  const hasWeightBeyondWho2007 = useMemo(
+    () =>
+      child
+        ? childAgeMonths > 120 ||
+          measurements.some(
+            (measurement) =>
+              measurement.weight_kg != null && ageInMonths(child.birth_date, measurement.date) > 120
+          )
+        : false,
+    [child, childAgeMonths, measurements]
+  );
 
   useEffect(() => {
-    if (!cdcAvailable && standard === "CDC") setStandard("WHO");
-  }, [cdcAvailable]);
+    if (!who2007Available && standard === "WHO2007") setStandard("WHO");
+  }, [who2007Available, standard]);
 
   const [sheetOpen, setSheetOpen] = useState(false);
   const [form, setForm] = useState<MeasForm>(emptyForm());
@@ -407,11 +418,11 @@ export default function FilhoScreen() {
             }}
           >
             <View style={{ flexDirection: "row", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
-              {cdcAvailable && (
+              {who2007Available && (
                 <TogglePill<GrowthStandard>
                   options={[
-                    { key: "WHO", label: "WHO (0–60m)" },
-                    { key: "CDC", label: "CDC (2–20a)" },
+                    { key: "WHO", label: "WHO 0-5a" },
+                    { key: "WHO2007", label: "WHO 5-19a" },
                   ]}
                   value={standard}
                   onChange={setStandard}
@@ -447,6 +458,21 @@ export default function FilhoScreen() {
                   percentileMode={pMode}
                   containerWidth={chartContainerWidth}
                 />
+                {standard === "WHO2007" && hasWeightBeyondWho2007 && (
+                  <View
+                    style={{
+                      backgroundColor: "#1c1d23",
+                      borderRadius: 10,
+                      padding: 14,
+                      marginTop: -12,
+                      marginBottom: 20,
+                    }}
+                  >
+                    <Text style={{ color: "#72737f", fontSize: 12 }}>
+                      WHO 2007 publica peso-por-idade apenas de 5 a 10 anos.
+                    </Text>
+                  </View>
+                )}
                 <GrowthChart
                   metric="height"
                   label="Altura / Comprimento"
@@ -471,7 +497,7 @@ export default function FilhoScreen() {
                     containerWidth={chartContainerWidth}
                   />
                 )}
-                {standard === "CDC" && (
+                {standard === "WHO2007" && (
                   <View
                     style={{
                       backgroundColor: "#1c1d23",
@@ -481,7 +507,7 @@ export default function FilhoScreen() {
                     }}
                   >
                     <Text style={{ color: "#72737f", fontSize: 12 }}>
-                      O CDC não publica curvas de circunferência cefálica para 2–20 anos.
+                      WHO não publica curvas de circunferência cefálica para 5-19 anos.
                     </Text>
                   </View>
                 )}

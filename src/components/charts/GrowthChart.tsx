@@ -442,7 +442,7 @@ export function GrowthChart({
         })}
       </View>
 
-      <View style={{ height: CHART_H, left: 0, position: "absolute", top: TITLE_H }}>
+      <View style={{ height: CHART_H, left: 0, position: "absolute", top: TITLE_H, width: PAD_LEFT }}>
         {yTicks.map((value, index) => {
           const ratio = (value - minValue) / (maxValue - minValue);
           const y = CHART_H - PAD_BOTTOM - ratio * (CHART_H - PAD_TOP - PAD_BOTTOM) - 6;

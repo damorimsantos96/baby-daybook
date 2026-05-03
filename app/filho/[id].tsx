@@ -439,6 +439,19 @@ function TogglePill<T extends string>({
   );
 }
 
+// ─── Delta badge ──────────────────────────────────────────────────────────────
+
+function DeltaBadge({ delta, unit, decimals }: { delta: number | null; unit: string; decimals: number }) {
+  if (delta == null) return null;
+  const positive = delta >= 0;
+  const sign = positive ? "+" : "";
+  return (
+    <Text style={{ color: positive ? "#10b981" : "#f59e0b", fontSize: 10, marginTop: 2 }}>
+      {sign}{delta.toFixed(decimals)} {unit}
+    </Text>
+  );
+}
+
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
 export default function FilhoScreen() {
@@ -475,6 +488,21 @@ export default function FilhoScreen() {
   }, [allMeasurements, children]);
   const compareChartLoading = compareAllChildren && (childrenLoading || allMeasurementsLoading);
   const chartHasAnyData = compareAllChildren ? allMeasurements.length > 0 : measurements.length > 0;
+
+  const deltas = useMemo(() =>
+    measurements.map((m, idx) => {
+      const rest = measurements.slice(idx + 1);
+      const pw = rest.find((p) => p.weight_kg != null);
+      const ph = rest.find((p) => p.height_cm != null);
+      const pc = rest.find((p) => p.head_circumference_cm != null);
+      return {
+        weight: m.weight_kg != null && pw ? m.weight_kg - pw.weight_kg! : null,
+        height: m.height_cm != null && ph ? m.height_cm - ph.height_cm! : null,
+        head: m.head_circumference_cm != null && pc ? m.head_circumference_cm - pc.head_circumference_cm! : null,
+      };
+    }),
+    [measurements]
+  );
 
   const childAgeMonths = useMemo(
     () => (child ? differenceInMonths(new Date(), parseISO(child.birth_date)) : 0),
@@ -619,25 +647,38 @@ export default function FilhoScreen() {
                 <Text style={[colHeader, { flex: 1 }]}>CABEÇA</Text>
               </View>
             }
-            renderItem={({ item }) => (
-              <Pressable
-                onPress={() => openEdit(item)}
-                style={{
-                  backgroundColor: "#1c1d23",
-                  borderRadius: 10,
-                  paddingHorizontal: 14,
-                  paddingVertical: 12,
-                  flexDirection: "row",
-                }}
-              >
-                <Text style={[cell, { flex: 2, color: "#ecfdf5" }]}>
-                  {format(parseISO(item.date), "dd/MM/yy")}
-                </Text>
-                <Text style={[cell, { flex: 1 }]}>{fmt(item.weight_kg)} kg</Text>
-                <Text style={[cell, { flex: 1 }]}>{fmt(item.height_cm, 1)} cm</Text>
-                <Text style={[cell, { flex: 1 }]}>{fmt(item.head_circumference_cm, 1)} cm</Text>
-              </Pressable>
-            )}
+            renderItem={({ item, index }) => {
+              const d = deltas[index];
+              return (
+                <Pressable
+                  onPress={() => openEdit(item)}
+                  style={{
+                    backgroundColor: "#1c1d23",
+                    borderRadius: 10,
+                    paddingHorizontal: 14,
+                    paddingVertical: 12,
+                    flexDirection: "row",
+                    alignItems: "center",
+                  }}
+                >
+                  <Text style={[cell, { flex: 2, color: "#ecfdf5" }]}>
+                    {format(parseISO(item.date), "dd/MM/yy")}
+                  </Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={cell}>{fmt(item.weight_kg)} kg</Text>
+                    <DeltaBadge delta={d.weight} unit="kg" decimals={2} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={cell}>{fmt(item.height_cm, 1)} cm</Text>
+                    <DeltaBadge delta={d.height} unit="cm" decimals={1} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={cell}>{fmt(item.head_circumference_cm, 1)} cm</Text>
+                    <DeltaBadge delta={d.head} unit="cm" decimals={1} />
+                  </View>
+                </Pressable>
+              );
+            }}
           />
         )
       ) : activeTab === "projecao" ? (

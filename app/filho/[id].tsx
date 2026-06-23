@@ -56,6 +56,64 @@ function fmt(val: number | null, decimals = 2): string {
   return val.toFixed(decimals);
 }
 
+// Compact age for the table: "6m" when under a year, otherwise "1a4m" / "2a".
+function ageShort(birthDate: string, atDate: string): string {
+  const total = Math.max(0, ageInMonths(birthDate, atDate));
+  const years = Math.floor(total / 12);
+  const months = total % 12;
+  if (years === 0) return `${months}m`;
+  return months > 0 ? `${years}a${months}m` : `${years}a`;
+}
+
+// ─── Table search ───────────────────────────────────────────────────────────────
+
+type SearchField = "weight" | "height" | "date";
+
+function parseSearchDate(input: string): number | null {
+  const t = input.trim();
+  let m = t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).getTime();
+  m = t.match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?$/);
+  if (m) {
+    let year = m[3] ? Number(m[3]) : new Date().getFullYear();
+    if (year < 100) year += 2000;
+    return new Date(year, Number(m[2]) - 1, Number(m[1])).getTime();
+  }
+  return null;
+}
+
+function measurementSearchValue(field: SearchField, m: Measurement): number | null {
+  if (field === "weight") return m.weight_kg;
+  if (field === "height") return m.height_cm;
+  return parseISO(m.date).getTime();
+}
+
+// Returns the entries immediately above/below the searched value (and the exact
+// match when present). Result ordered larger→smaller to match the date-desc table.
+function findNeighborMeasurements(
+  field: SearchField,
+  search: number,
+  measurements: Measurement[]
+): Measurement[] {
+  const withValue = measurements
+    .map((m) => ({ m, v: measurementSearchValue(field, m) }))
+    .filter((x): x is { m: Measurement; v: number } => x.v != null)
+    .sort((a, b) => a.v - b.v);
+  if (withValue.length === 0) return [];
+
+  let below: Measurement | null = null;
+  let above: Measurement | null = null;
+  for (const { m, v } of withValue) {
+    if (v <= search) below = m;
+    if (v >= search && above == null) above = m;
+  }
+
+  const out: Measurement[] = [];
+  if (above) out.push(above);
+  if (below && below !== above) out.push(below);
+  return out;
+}
+
 // ─── Measurement form ─────────────────────────────────────────────────────────
 
 interface MeasForm {
@@ -469,6 +527,8 @@ export default function FilhoScreen() {
   const [standard, setStandard] = useState<GrowthStandard>("WHO");
   const [pMode, setPMode] = useState<PercentileMode>(3);
   const [chartContainerWidth, setChartContainerWidth] = useState(0);
+  const [searchField, setSearchField] = useState<SearchField>("weight");
+  const [searchValue, setSearchValue] = useState("");
   const allChildIds = useMemo(() => children.map((item) => item.id), [children]);
   const { data: allMeasurements = [], isLoading: allMeasurementsLoading } =
     useMeasurementsForChildren(compareAllChildren ? allChildIds : []);
@@ -489,20 +549,50 @@ export default function FilhoScreen() {
   const compareChartLoading = compareAllChildren && (childrenLoading || allMeasurementsLoading);
   const chartHasAnyData = compareAllChildren ? allMeasurements.length > 0 : measurements.length > 0;
 
-  const deltas = useMemo(() =>
-    measurements.map((m, idx) => {
+  const deltaById = useMemo(() => {
+    const map = new Map<string, { weight: number | null; height: number | null; head: number | null }>();
+    measurements.forEach((m, idx) => {
       const rest = measurements.slice(idx + 1);
       const pw = rest.find((p) => p.weight_kg != null);
       const ph = rest.find((p) => p.height_cm != null);
       const pc = rest.find((p) => p.head_circumference_cm != null);
-      return {
+      map.set(m.id, {
         weight: m.weight_kg != null && pw ? m.weight_kg - pw.weight_kg! : null,
         height: m.height_cm != null && ph ? m.height_cm - ph.height_cm! : null,
         head: m.head_circumference_cm != null && pc ? m.head_circumference_cm - pc.head_circumference_cm! : null,
-      };
-    }),
-    [measurements]
+      });
+    });
+    return map;
+  }, [measurements]);
+
+  const parsedSearch = useMemo(() => {
+    const raw = searchValue.trim();
+    if (!raw) return null;
+    if (searchField === "date") return parseSearchDate(raw);
+    const n = parseFloat(raw.replace(",", "."));
+    return Number.isFinite(n) ? n : null;
+  }, [searchField, searchValue]);
+
+  const visibleMeasurements = useMemo(
+    () =>
+      parsedSearch == null
+        ? measurements
+        : findNeighborMeasurements(searchField, parsedSearch, measurements),
+    [measurements, parsedSearch, searchField]
   );
+  const searchActive = parsedSearch != null;
+  const searchSummary =
+    searchField === "date"
+      ? parsedSearch != null
+        ? format(new Date(parsedSearch), "dd/MM/yy")
+        : ""
+      : `${searchValue.replace(",", ".")} ${searchField === "weight" ? "kg" : "cm"}`;
+  const searchPlaceholder =
+    searchField === "weight"
+      ? "Buscar peso (kg)"
+      : searchField === "height"
+        ? "Buscar altura (cm)"
+        : "Buscar data (dd/mm/aa)";
 
   const childAgeMonths = useMemo(
     () => (child ? differenceInMonths(new Date(), parseISO(child.birth_date)) : 0),
@@ -635,51 +725,107 @@ export default function FilhoScreen() {
             </Pressable>
           </View>
         ) : (
-          <FlatList
-            data={measurements}
-            keyExtractor={(m) => m.id}
-            contentContainerStyle={{ padding: 16, gap: 10 }}
-            ListHeaderComponent={
-              <View style={{ flexDirection: "row", paddingHorizontal: 4, marginBottom: 4 }}>
-                <Text style={[colHeader, { flex: 2 }]}>DATA</Text>
-                <Text style={[colHeader, { flex: 1 }]}>PESO</Text>
-                <Text style={[colHeader, { flex: 1 }]}>ALTURA</Text>
-                <Text style={[colHeader, { flex: 1 }]}>CABEÇA</Text>
+          <View style={{ flex: 1 }}>
+            {/* Search: peso / altura / data → mostra vizinhos imediatos */}
+            <View style={{ paddingHorizontal: 16, paddingTop: 2, paddingBottom: 8 }}>
+              <TogglePill<SearchField>
+                options={[
+                  { key: "weight", label: "Peso" },
+                  { key: "height", label: "Altura" },
+                  { key: "date", label: "Data" },
+                ]}
+                value={searchField}
+                onChange={setSearchField}
+              />
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  backgroundColor: "#1c1d23",
+                  borderRadius: 10,
+                  paddingHorizontal: 12,
+                  marginTop: 8,
+                }}
+              >
+                <Ionicons name="search" size={16} color="#72737f" />
+                <TextInput
+                  value={searchValue}
+                  onChangeText={setSearchValue}
+                  placeholder={searchPlaceholder}
+                  placeholderTextColor="#4a4b58"
+                  keyboardType={searchField === "date" ? "default" : "decimal-pad"}
+                  style={{ flex: 1, color: "#ecfdf5", fontSize: 14, paddingVertical: 10, paddingHorizontal: 8 }}
+                />
+                {searchValue ? (
+                  <Pressable onPress={() => setSearchValue("")} hitSlop={8}>
+                    <Ionicons name="close-circle" size={18} color="#72737f" />
+                  </Pressable>
+                ) : null}
               </View>
-            }
-            renderItem={({ item, index }) => {
-              const d = deltas[index];
-              return (
-                <Pressable
-                  onPress={() => openEdit(item)}
-                  style={{
-                    backgroundColor: "#1c1d23",
-                    borderRadius: 10,
-                    paddingHorizontal: 14,
-                    paddingVertical: 12,
-                    flexDirection: "row",
-                    alignItems: "center",
-                  }}
-                >
-                  <Text style={[cell, { flex: 2, color: "#ecfdf5" }]}>
-                    {format(parseISO(item.date), "dd/MM/yy")}
+              {searchActive ? (
+                <Text style={{ color: "#72737f", fontSize: 11, marginTop: 6 }}>
+                  Vizinhos de {searchSummary} · {visibleMeasurements.length} de {measurements.length}
+                </Text>
+              ) : null}
+            </View>
+            <FlatList
+              data={visibleMeasurements}
+              keyExtractor={(m) => m.id}
+              contentContainerStyle={{ padding: 16, paddingTop: 0, gap: 10 }}
+              ListHeaderComponent={
+                <View style={{ flexDirection: "row", paddingHorizontal: 4, marginBottom: 4 }}>
+                  <Text style={[colHeader, { flex: 2 }]}>DATA</Text>
+                  <Text style={[colHeader, { flex: 1 }]}>PESO</Text>
+                  <Text style={[colHeader, { flex: 1 }]}>ALTURA</Text>
+                  <Text style={[colHeader, { flex: 1 }]}>CABEÇA</Text>
+                </View>
+              }
+              ListEmptyComponent={
+                searchActive ? (
+                  <Text style={{ color: "#72737f", fontSize: 13, textAlign: "center", marginTop: 24 }}>
+                    Sem medições para essa busca
                   </Text>
-                  <View style={{ flex: 1 }}>
-                    <Text style={cell}>{fmt(item.weight_kg)} kg</Text>
-                    <DeltaBadge delta={d.weight} unit="kg" decimals={2} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={cell}>{fmt(item.height_cm, 1)} cm</Text>
-                    <DeltaBadge delta={d.height} unit="cm" decimals={1} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={cell}>{fmt(item.head_circumference_cm, 1)} cm</Text>
-                    <DeltaBadge delta={d.head} unit="cm" decimals={1} />
-                  </View>
-                </Pressable>
-              );
-            }}
-          />
+                ) : null
+              }
+              renderItem={({ item }) => {
+                const d = deltaById.get(item.id);
+                return (
+                  <Pressable
+                    onPress={() => openEdit(item)}
+                    style={{
+                      backgroundColor: "#1c1d23",
+                      borderRadius: 10,
+                      paddingHorizontal: 14,
+                      paddingVertical: 12,
+                      flexDirection: "row",
+                      alignItems: "center",
+                    }}
+                  >
+                    <View style={{ flex: 2 }}>
+                      <Text style={[cell, { color: "#ecfdf5" }]}>
+                        {format(parseISO(item.date), "dd/MM/yy")}
+                      </Text>
+                      <Text style={{ color: "#72737f", fontSize: 10, marginTop: 2 }}>
+                        {ageShort(child.birth_date, item.date)}
+                      </Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={cell}>{fmt(item.weight_kg)} kg</Text>
+                      <DeltaBadge delta={d?.weight ?? null} unit="kg" decimals={2} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={cell}>{fmt(item.height_cm, 1)} cm</Text>
+                      <DeltaBadge delta={d?.height ?? null} unit="cm" decimals={1} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={cell}>{fmt(item.head_circumference_cm, 1)} cm</Text>
+                      <DeltaBadge delta={d?.head ?? null} unit="cm" decimals={1} />
+                    </View>
+                  </Pressable>
+                );
+              }}
+            />
+          </View>
         )
       ) : activeTab === "projecao" ? (
         <ProjectionTab birthDate={child.birth_date} measurements={measurements} sex={child.sex} />

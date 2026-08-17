@@ -109,6 +109,7 @@
 - Portrait only.
 
 ## Risky / Fragile Areas
+- `.github/workflows/supabase-keepalive.yml` pings Supabase every 4 days because the free tier pauses a project after 7 idle days. GitHub disables scheduled workflows after 60 days of repository inactivity, so the workflow re-enables itself through `PUT /actions/workflows/{file}/enable` on every run (`permissions: actions: write`). Removing that step means the cron dies quietly and Supabase pauses a week later.
 - `measurements` has a UNIQUE constraint on (child_id, date) — upserts must use ON CONFLICT.
 - Signed photo URLs expire; do not cache them long-term.
 - `app_version_config` must be updated after every native EAS build.

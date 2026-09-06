@@ -65,6 +65,15 @@ function getTable(metric: GrowthMetric, sex: Sex, standard: GrowthStandard): rea
   return [];
 }
 
+// WHO 0-5a e WHO 2007 sao continuas na emenda: medido em 06/09/2026, o degrau
+// de 60m para 61m fica em 0,04-0,17 kg (peso) e 0,15-0,38 cm (altura), ou seja
+// dentro do crescimento normal de um mes. Por isso as duas viram uma tabela so e
+// a interpolacao atravessa a juncao -- sem ela, idade fracionaria entre 60 e 61
+// meses nao cai em tabela nenhuma e o percentil some sem erro.
+function getAgeTable(metric: GrowthMetric, sex: Sex): readonly LmsRow[] {
+  return [...getTable(metric, sex, "WHO"), ...getTable(metric, sex, "WHO2007")];
+}
+
 function getMeta(metric: GrowthMetric, standard: GrowthStandard): ReferenceRange | null {
   if (standard === "WHO") {
     return { startMonth: 0, endMonth: 60, label: "0-5y" };
@@ -236,9 +245,7 @@ function getP50EquivalentAgeMonths(
   sex: Sex,
   value: number
 ): number | null {
-  const whoRows = getTable(metric, sex, "WHO");
-  const who2007Rows = metric !== "head" ? getTable(metric, sex, "WHO2007") : [];
-  const table: readonly LmsRow[] = [...whoRows, ...who2007Rows];
+  const table = getAgeTable(metric, sex);
 
   if (!table.length) return null;
 
@@ -344,23 +351,18 @@ function inverseNormalCdf(probability: number): number {
   );
 }
 
-function getProjectionStandard(metric: GrowthMetric, month: number): GrowthStandard | null {
-  if (month >= 0 && month <= 60) return "WHO";
-  if (metric === "head") return null;
-  if (metric === "weight" && month >= 61 && month <= 120) return "WHO2007";
-  if (metric === "height" && month >= 61 && month <= 228) return "WHO2007";
-  return null;
-}
-
 export function getObservedPercentileNumber(
   metric: GrowthMetric,
   sex: Sex,
   month: number,
   value: number
 ): number | null {
-  const standard = getProjectionStandard(metric, month);
-  if (!standard) return null;
-  return getValuePercentileNumber(metric, sex, standard, month, value);
+  const row = interpolateRow(getAgeTable(metric, sex), month);
+  if (!row) return null;
+
+  const percentile = normalCdf(lmsZ(row, value)) * 100;
+  if (!Number.isFinite(percentile)) return null;
+  return Math.max(0, Math.min(100, percentile));
 }
 
 export function getProjectedValueAtPercentile(
@@ -369,10 +371,7 @@ export function getProjectedValueAtPercentile(
   month: number,
   percentile: number
 ): number | null {
-  const standard = getProjectionStandard(metric, month);
-  if (!standard) return null;
-
-  const row = interpolateRow(getTable(metric, sex, standard), month);
+  const row = interpolateRow(getAgeTable(metric, sex), month);
   if (!row) return null;
 
   const clampedPercentile = Math.max(0.0001, Math.min(99.9999, percentile)) / 100;

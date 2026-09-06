@@ -22,7 +22,6 @@ import {
   getP50EquivalentInfo,
   getProjectedValueAtPercentile,
   getProjectionRange,
-  getValuePercentile,
 } from "@/utils/growthCurves";
 import { Ionicons } from "@expo/vector-icons";
 import { useChild, useChildPhotoUrl, useChildren } from "@/hooks/useChildren";
@@ -155,19 +154,16 @@ interface SummaryItem {
   metric: GrowthMetric;
   unit: string;
   decimals: number;
-  std?: GrowthStandard;
 }
 
 function MeasurementSummary({
   measurements,
   birthDate,
   sex,
-  standard,
 }: {
   measurements: Measurement[];
   birthDate: string;
   sex: Sex;
-  standard: GrowthStandard;
 }) {
   const items: SummaryItem[] = useMemo(() => {
     const sorted = [...measurements].sort((a, b) => b.date.localeCompare(a.date));
@@ -177,18 +173,20 @@ function MeasurementSummary({
     return [
       { label: "Peso", m: lw, value: lw?.weight_kg ?? null, metric: "weight", unit: "kg", decimals: 2 },
       { label: "Altura", m: lh, value: lh?.height_cm ?? null, metric: "height", unit: "cm", decimals: 1 },
-      { label: "Cabeça", m: lc, value: lc?.head_circumference_cm ?? null, metric: "head", unit: "cm", decimals: 1, std: "WHO" },
+      { label: "Cabeça", m: lc, value: lc?.head_circumference_cm ?? null, metric: "head", unit: "cm", decimals: 1 },
     ];
-  }, [measurements, standard]);
+  }, [measurements]);
 
   return (
     <View style={{ flexDirection: "row", paddingHorizontal: 16, marginBottom: 12, gap: 8 }}>
-      {items.map(({ label, m, value, metric, unit, decimals, std }) => {
+      {items.map(({ label, m, value, metric, unit, decimals }) => {
         const month = m ? ageInMonthsPrecise(birthDate, m.date) : null;
-        const percentile =
+        const percentileNumber =
           month != null && value != null
-            ? getValuePercentile(metric, sex, std ?? standard, month, value)
+            ? getObservedPercentileNumber(metric, sex, month, value)
             : null;
+        const percentile =
+          percentileNumber != null ? formatPercentileLabel(percentileNumber) : null;
         const p50Info =
           month != null && value != null ? getP50EquivalentInfo(metric, sex, month, value) : null;
         return (
@@ -701,7 +699,6 @@ export default function FilhoScreen() {
           measurements={measurements}
           birthDate={child.birth_date}
           sex={child.sex}
-          standard={standard}
         />
       )}
 
